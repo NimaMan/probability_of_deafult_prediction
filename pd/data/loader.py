@@ -1,6 +1,9 @@
 
+import pandas as pd 
 import torch 
 from torch.utils.data import Dataset, DataLoader
+from pd.data.scaler import get_scaler
+from pd.params import DATADIR, CATCOLS
 
 
 def agg_cat_cont_feat(cont_feat, cat_feat, agg_type="contOnly"):
@@ -47,3 +50,25 @@ class CustomerData(Dataset):
             customer_label = torch.as_tensor(self.train_labels.loc[customer_id].values, dtype=torch.float32)
             return feat, customer_label
 
+
+
+def load_data(train=True):
+    if train:
+        data = pd.read_parquet(DATADIR+"train_data.parquet")
+        labels = pd.read_csv(DATADIR+"train_labels.csv")
+
+    else:
+        data = pd.read_parquet(DATADIR+"test_data.parquet")
+        labels = None
+    
+    cont_cols = [col for col in data.columns.to_list() if col not in CATCOLS + ["customer_ID", "S_2", "target"]]
+    # data prep 
+    #train_data[["D_63", "D_64"]] = train_data[["D_63", "D_64"]].astype("category").apply(lambda x: x.cat.codes)
+    #cat_cols = ["D_63", "D_64"]
+    #train_data = train_data.dropna(how="any", axis=1) 
+    ## transform the cont cols 
+    scaler = get_scaler(train_data[cont_cols].values)
+    train_data[cont_cols] = scaler.transform(train_data[cont_cols].values)
+    
+
+    return train_loader
