@@ -10,25 +10,17 @@ import json
 
 from bes.es import CMAES, BES
 from pd.nn.model import MLP
-from pd.params import DATADIR, CATCOLS
-from pd.data.scaler import get_scaler
+from pd.params import DATADIR, CATCOLS, OUTDIR
+from pd.data.loader import load_data
+from pd.metric import amex_metric
 
 
 def rollout(model):
-    train_data = pd.read_parquet(DATADIR+"train_data.parquet")
-    train_labels = pd.read_csv(DATADIR+"train_labels.csv")
-    cont_cols = [col for col in train_data.columns.to_list() if col not in CATCOLS + ["customer_ID", "S_2", "target"]]
-
-    # data prep 
-    #train_data[["D_63", "D_64"]] = train_data[["D_63", "D_64"]].astype("category").apply(lambda x: x.cat.codes)
-    #cat_cols = ["D_63", "D_64"]
-    #train_data = train_data.dropna(how="any", axis=1) 
-    ## transform the cont cols 
-    scaler = get_scaler(train_data[cont_cols].values)
-    train_data[cont_cols] = scaler.transform(train_data[cont_cols].values)
+    (cont_feat, cat_feat), labels  = load_data()
+    pred = model(cont_feat)
+    reward = amex_metric(labels.target.values, pred.detach().numpy())
     
-
-    return train_loader
+    return -reward
     
 
 @ray.remote
@@ -63,11 +55,12 @@ def get_candidate_rewards(candidates, model_factory):
     return rewards
 
 
-def run_with_ray(model_cls, model_inpuit_dim, population_size, num_cma_iterations, tempdir, model_kwargs={} ):
+def run_with_ray(model_cls, population_size, num_cma_iterations, tempdir, model_kwargs={} ):
     
-    model_factory = functools.partial(model_cls, model_inpuit_dim, **model_kwargs)
+    model_factory = functools.partial(model_cls, **model_kwargs)
     es = BES(model_factory(), popsize=population_size)
-    
+    model = model_factory()
+    print("in first", model.model_shapes)
     training_history = []
     for cma_iteration in range(1, num_cma_iterations+1):
         candidates = es.ask()
@@ -88,27 +81,21 @@ def run_with_ray(model_cls, model_inpuit_dim, population_size, num_cma_iteration
 
 
 @click.command()
-@click.option("--population-size", default=50, type=int)
-@click.option("--num-cma-iterations", default=100, type=int)
-@click.option("--n-workers", default=32)
-def run_experiment(env_name, population_size, num_cma_iterations, n_workers, step_scaling, min_steps, max_steps,
-                   scaling_exponent):
+@click.option("--population-size", default=5, type=int)
+@click.option("--num-cma-iterations", default=1, type=int)
+@click.option("--n-workers", default=4)
+def run_experiment(population_size, num_cma_iterations, n_workers):
 
-    model_kwargs = dict()
+    model_kwargs = dict(input_dim=177, )
 
     run_info = dict(
         model_class_name=str(MLP),
-        environment_name=env_name,
         population_size=population_size,
         num_cma_iterations=num_cma_iterations,
         model_kwargs=model_kwargs,
-        step_scaling=step_scaling,
-        min_steps=min_steps,
-        max_steps=max_steps,
-        scaling_exponent=scaling_exponent,
     )
 
-    tempdir = tempfile.mkdtemp(prefix=env_name+"_", dir=".")
+    tempdir = tempfile.mkdtemp(prefix="pd_", dir=OUTDIR)
     with open(os.path.join(tempdir, "run_info.json"), "w") as fh:
         json.dump(run_info, fh, indent=4)
 

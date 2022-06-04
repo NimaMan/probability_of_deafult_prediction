@@ -1,4 +1,4 @@
-
+#%%
 import pandas as pd 
 import torch 
 from torch.utils.data import Dataset, DataLoader
@@ -52,7 +52,7 @@ class CustomerData(Dataset):
 
 
 
-def load_data(train=True):
+def load_data(train=True, scaler=None):
     if train:
         data = pd.read_parquet(DATADIR+"train_data.parquet")
         labels = pd.read_csv(DATADIR+"train_labels.csv")
@@ -67,8 +67,19 @@ def load_data(train=True):
     #cat_cols = ["D_63", "D_64"]
     #train_data = train_data.dropna(how="any", axis=1) 
     ## transform the cont cols 
-    scaler = get_scaler(train_data[cont_cols].values)
-    train_data[cont_cols] = scaler.transform(train_data[cont_cols].values)
-    
+    if False:
+        scaler = get_scaler(data[cont_cols].values)
+        cont_data = scaler.transform(data[cont_cols].values)
+    # deal with na data
+    customer_data = data.groupby("customer_ID").mean().fillna(0)
+    cont_data = customer_data[cont_cols].values
+    cont_data = torch.as_tensor(cont_data, dtype=torch.float32)
+    cat_data = customer_data[CATCOLS].values        
+    cat_data = torch.as_tensor(cat_data, dtype=torch.float32).mean(dim=0)
+    feat = (cont_data, cat_data)
+        
+    return feat, labels
 
-    return train_loader
+if __name__ == "__main__":
+    (cont_feat, cat_feat), labels = load_data(train=True,)
+# %%

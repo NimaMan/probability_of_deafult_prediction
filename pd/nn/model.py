@@ -2,12 +2,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
+from bes.nn.es_module import ESModule
 
 
+class MLP(ESModule):
 
-class MLP(nn.Module):
-
-    def __init__(self, input_dim, hidden_dim, output_dim=1, activation=F.selu, num_hidden_layers=1,
+    def __init__(self, input_dim, hidden_dim=64, output_dim=1, activation=F.selu, num_hidden_layers=1,
                  output_activation=F.sigmoid):
         super(MLP, self).__init__()
         self.input_dim = input_dim

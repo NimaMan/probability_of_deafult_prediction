@@ -44,6 +44,9 @@ if __name__ == "__main__":
             feat = cont_feat
 
             pred = model(feat)
+            weight = clabel.clone()
+            weight[weight==0] = 4
+            criterion.weight = weight
             loss = criterion(pred, clabel)
             
             # Update weights
@@ -71,7 +74,7 @@ if __name__ == "__main__":
         test_data_size = test_data.shape[0]
         test_data[cont_cols] = scaler.transform(test_data[cont_cols].values)
     
-        test_dataset = CustomerData(test_data, test_mode=True)
+        test_dataset = CustomerData(test_data, test_mode=True, cat_cols=CATCOLS)
         test_loader = DataLoader(test_dataset, batch_size=test_data.shape[0])
         
         for (cont_feat, cat_feat), customer_index in test_loader:
