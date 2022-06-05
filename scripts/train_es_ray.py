@@ -10,7 +10,7 @@ import json
 
 from bes.es import CMAES, BES
 from pd.nn.model import MLP
-from pd.params import DATADIR, CATCOLS, OUTDIR
+from pd.params import DATADIR, CATCOLS, OUTDIR, PerfThreshold, logBestIndiv
 from pd.data.loader import load_data
 from pd.metric import amex_metric
 
@@ -20,7 +20,19 @@ def rollout(model):
     pred = model(cont_feat)
     reward = amex_metric(labels.target.values, pred.detach().numpy())
     
-    return -reward
+    return reward
+
+
+def eval(model_factory, weights, reward=0):
+    model = model_factory()
+    model.eval()
+    model.set_model_params(weights)
+    (cont_feat, cat_feat), labels  = load_data(train=False)
+    pred = model(cont_feat)
+    out_dir = os.path.join(OUTDIR, f"sub_{reward*1000:.0f}.csv")
+    result = pd.DataFrame({"customer_ID":labels, "prediction":pred.detach().numpy().reshape(-1)})
+    result.set_index("customer_ID").to_csv(out_dir)
+    
     
 
 @ray.remote
@@ -59,31 +71,30 @@ def run_with_ray(model_cls, population_size, num_cma_iterations, tempdir, model_
     
     model_factory = functools.partial(model_cls, **model_kwargs)
     es = BES(model_factory(), popsize=population_size)
-    model = model_factory()
-    print("in first", model.model_shapes)
     training_history = []
     for cma_iteration in range(1, num_cma_iterations+1):
         candidates = es.ask()
-        ind_rewards = get_candidate_rewards(candidates, model_factory)
-
-        rewards = [np.mean([sum(r) for r in ind_r]) for ind_r in ind_rewards]
-        num_steps = np.mean([np.mean([len(r) for r in ind_r]) for ind_r in ind_rewards])
+        rewards = get_candidate_rewards(candidates, model_factory)
         training_history.append(np.array(rewards))
         h = f"episode: {int(cma_iteration)}, best reward {np.max(rewards)} median {np.median(rewards)} mean {np.mean(rewards)}," \
-            f" std {np.std(rewards) }, num_steps {num_steps}, avg_reward {np.max(rewards) / num_steps}\n"
+            f" std {np.std(rewards) },\n"
         with open(os.path.join(tempdir, "progress.txt"), "a") as fh:
             fh.write(h)
-        if cma_iteration % 100 == 0:
+        if cma_iteration % logBestIndiv == 0:
             best_idx = np.argmax(rewards)
             best_weights = candidates[best_idx]
             np.save(os.path.join(tempdir, f"best_iteration_{cma_iteration:04d}.npy"), best_weights)
+            best_reward = rewards[best_idx]
+            if best_reward > PerfThreshold:
+                eval(model_factory, best_weights, reward=best_reward)
+
         es.tell(rewards)
 
 
 @click.command()
-@click.option("--population-size", default=5, type=int)
-@click.option("--num-cma-iterations", default=1, type=int)
-@click.option("--n-workers", default=4)
+@click.option("--population-size", default=50, type=int)
+@click.option("--num-cma-iterations", default=400, type=int)
+@click.option("--n-workers", default=127)
 def run_experiment(population_size, num_cma_iterations, n_workers):
 
     model_kwargs = dict(input_dim=177, )

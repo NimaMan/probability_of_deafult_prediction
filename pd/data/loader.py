@@ -72,6 +72,8 @@ def load_data(train=True, scaler=None):
         cont_data = scaler.transform(data[cont_cols].values)
     # deal with na data
     customer_data = data.groupby("customer_ID").mean().fillna(0)
+    if not train:
+        labels = customer_data.index.values
     cont_data = customer_data[cont_cols].values
     cont_data = torch.as_tensor(cont_data, dtype=torch.float32)
     cat_data = customer_data[CATCOLS].values        
