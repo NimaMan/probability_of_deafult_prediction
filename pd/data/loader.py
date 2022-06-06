@@ -1,4 +1,5 @@
 #%%
+import numpy as np
 import pandas as pd 
 import torch 
 from torch.utils.data import Dataset, DataLoader
@@ -52,10 +53,55 @@ class CustomerData(Dataset):
 
 
 
-def load_data(train=True, scaler=None):
+def load_data_all(train=True, scaler=None):
     if train:
         data = pd.read_parquet(DATADIR+"train_data.parquet")
         labels = pd.read_csv(DATADIR+"train_labels.csv")
+
+    else:
+        data = pd.read_parquet(DATADIR+"test_data.parquet")
+        labels = None
+    
+    cont_cols = [col for col in data.columns.to_list() if col not in CATCOLS + ["customer_ID", "S_2", "target"]]
+    # data prep 
+    #train_data[["D_63", "D_64"]] = train_data[["D_63", "D_64"]].astype("category").apply(lambda x: x.cat.codes)
+    #cat_cols = ["D_63", "D_64"]
+    #train_data = train_data.dropna(how="any", axis=1) 
+    ## transform the cont cols 
+    if False:
+        scaler = get_scaler(data[cont_cols].values)
+        cont_data = scaler.transform(data[cont_cols].values)
+    # deal with na data
+    customer_data = data.groupby("customer_ID").mean().fillna(0)
+    if not train:
+        labels = customer_data.index.values
+    cont_data = customer_data[cont_cols].values
+    cont_data = torch.as_tensor(cont_data, dtype=torch.float32)
+    cat_data = customer_data[CATCOLS].values        
+    cat_data = torch.as_tensor(cat_data, dtype=torch.float32).mean(dim=0)
+    feat = (cont_data, cat_data)
+        
+    return feat, labels
+
+
+def get_data_rows():
+    data_size = 5531451
+    chunks = 50
+    b = data_size//chunks
+    row_indices = [i*b+1 for i in range(chunks)]
+    idx = np.random.randint(low=0, high=chunks-1)
+    skiprows = range(1, row_indices[idx])
+    nrows = b
+
+    return skiprows, nrows
+    
+
+def load_data(train=True, scaler=None):
+    if train:
+        skiprows, nrows = get_data_rows()
+        data = pd.read_csv(DATADIR+"train_data.csv", skiprows=skiprows, nrows=nrows, header=0, engine="c", index_col=0)
+        labels = pd.read_csv(DATADIR+"train_labels.csv")
+        labels = labels[labels.customer_ID.isin(data.customer_ID.values)]
 
     else:
         data = pd.read_parquet(DATADIR+"test_data.parquet")
