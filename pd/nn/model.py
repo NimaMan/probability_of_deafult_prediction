@@ -40,6 +40,25 @@ class MLP(ESModule):
         return torch.sigmoid(self.layers[-1](h))
 
 
+class Conv(nn.Module):
+
+    def __init__(self, hidden_dim=64, output_dim=1, ):
+        super(Conv, self).__init__()
+        self.hidden_dim = hidden_dim
+        self.output_dim = output_dim
+        self.conv1 = nn.Conv1d(in_channels=13, out_channels=25, kernel_size=5, )
+        self.conv2 = nn.Conv1d(in_channels=25, out_channels=5, kernel_size=5, )
+        self.conv3 = nn.Conv1d(in_channels=5, out_channels=1, kernel_size=3, )
+        self.fc1 = nn.Linear(in_features=154, out_features=hidden_dim)
+        self.fc2 = nn.Linear(in_features=hidden_dim, out_features=1)
+    def forward(self, h):
+        h = F.selu(self.conv1(h))
+        h = F.selu(self.conv2(h))
+        h = F.selu(self.conv3(h))
+        h = F.selu(self.fc1(h))
+        return torch.sigmoid(self.fc2(h)).squeeze(-1)
+
+
 class CatEndModel(nn.Module):
     def __init__(self, input_dim):
         super(BaseModel, self).__init__()
