@@ -3,8 +3,7 @@ import numpy as np
 import pandas as pd 
 import torch 
 from torch.utils.data import Dataset, DataLoader
-from pd.data.scaler import get_scaler
-from pd.params import DATADIR, CATCOLS
+from pd.params import *
 
 
 def agg_cat_cont_feat(cont_feat, cat_feat, agg_type="contOnly"):
@@ -96,7 +95,7 @@ def get_data_rows():
     return skiprows, nrows
     
 
-def load_data(train=True, scaler=None):
+def load_full_data_with_cat_cont_feat(train=True, scaler=None):
     if train:
         skiprows, nrows = get_data_rows()
         data = pd.read_csv(DATADIR+"train_data.csv", skiprows=skiprows, nrows=nrows, header=0, engine="c", index_col=0)
@@ -127,6 +126,17 @@ def load_data(train=True, scaler=None):
     feat = (cont_data, cat_data)
         
     return feat, labels
+
+
+def load_npy_data(batch_size, seed=None):
+    if seed is not None:
+        np.random.seed(seed=seed)
+    d = np.load(OUTDIR+"train_data_all.npy")
+    train_labels = np.load(OUTDIR+"train_labels_all.npy")
+
+    batch_indices =  np.random.randint(low=0, high=len(d))
+
+    return d[batch_indices], train_labels[batch_indices]
 
 if __name__ == "__main__":
     (cont_feat, cat_feat), labels = load_data(train=True,)

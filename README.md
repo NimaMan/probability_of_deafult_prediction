@@ -1,6 +1,8 @@
 
 **Probability of Deafult Prediction**
 
+# Discussion 
+The data has (N, T, F) dimensions. The T may consists of some ime related information. The intial experiments with the Conv nets gives a relatively okay result. 
 
 # Define the steps
 
@@ -15,13 +17,17 @@ The fists step from the data side could be only working with the dataset of the 
 
 
 # todo
-- preapare a submission with only the c13 customers
+-experiment with different sets of columns (for now just focus on the cont)
+- try conv net with shuffeling (did not affect the traning procedure much)
 - normalize data by 98 percentile
-- experiment with different sets of columns (for now just focus on the cont)
-- experiment with pooling and attention 
+- experiment with pooling and attention (initiall trials with maxpoolin and multihead attention did not workout well) 
 - give numbers to the features for easier feature manipoulatioin
+- Try the es on the conv net
 
 # Simplify
+identify possible paths to a solution.
+ - List the possible causes of the problem
+
 ## Assumptions
 - Nan values are replaced with 0
 

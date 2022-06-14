@@ -161,5 +161,5 @@ ManCols = ["P_2", "B_1", "B_2", "R_1", "S_3", "D_41", "B_3",
 BATCH_SIZE = 15000
 
 ## log 
-PerfThreshold = 0.75
+PerfThreshold = 0.77
 logBestIndiv = 20

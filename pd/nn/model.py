@@ -40,7 +40,7 @@ class MLP(ESModule):
         return torch.sigmoid(self.layers[-1](h))
 
 
-class Conv(nn.Module):
+class Conv(ESModule):
 
     def __init__(self, hidden_dim=64, output_dim=1, ):
         super(Conv, self).__init__()
