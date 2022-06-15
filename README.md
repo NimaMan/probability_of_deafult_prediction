@@ -17,12 +17,19 @@ The fists step from the data side could be only working with the dataset of the 
 
 
 # todo
--experiment with different sets of columns (for now just focus on the cont)
+## Major
+- Try the es on the conv net
+- Determine different thresholds for feature selection 
+- Add the cat variables to the model
+- predict the NaN data using the rest of the data
+
+## Details
+- add get name to the models itself
+- experiment with different sets of columns (for now just focus on the cont)
 - try conv net with shuffeling (did not affect the traning procedure much)
 - normalize data by 98 percentile
 - experiment with pooling and attention (initiall trials with maxpoolin and multihead attention did not workout well) 
 - give numbers to the features for easier feature manipoulatioin
-- Try the es on the conv net
 
 # Simplify
 identify possible paths to a solution.
