@@ -1,9 +1,10 @@
 
 import torch 
 from pd.metric import amex_metric
+from pd.params import *
 
 
-def train(model, loader, num_epochs=15):
+def train(model, loader, num_epochs=15, output_model_name=""):
     optimizer = torch.optim.Adam(model.parameters(),)
     criterion = torch.nn.BCELoss()
 
@@ -19,6 +20,13 @@ def train(model, loader, num_epochs=15):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            print(f"{epoch}, BCE loss: {loss.item():.3f}, amex: {amex_metric(clabel.detach().numpy(), pred.detach().numpy()):.3f}")
+            model_metric = amex_metric(clabel.detach().numpy(), pred.detach().numpy())
+            print(f"{epoch}, BCE loss: {loss.item():.3f}, amex: {model_metric:.3f}")
+            if model_metric > 0.79:
+                output_model_name = output_model_name + f"{epoch}"
+                torch.save(model.state_dict(), OUTDIR+output_model_name)
+
+
+
 
     return model

@@ -5,6 +5,7 @@ import torch
 import json
 
 from pd.params import *
+from pd.nn.model import Conv
 
 
 def pred13(model):
@@ -34,14 +35,16 @@ def pred13(model):
     result.set_index("customer_ID").to_csv(OUTDIR+"sub.csv")
 
 
-def pred_test_npy(model,):
+def pred_test_npy(model=None, model_name="conv_all"):
     test_data = np.load(OUTDIR+"test_data_all.npy")
     with open(OUTDIR+'test_customers_id_dict.json', 'r') as f:
             test_id_dict = json.load(f)
 
-    #model = Conv()
-    #model_param = torch.load(OUTDIR+"Conv")
-    #model.load_state_dict(model_param)
+    if model is None:
+        model = Conv()
+        model_param = torch.load(OUTDIR+model_name)
+        model.load_state_dict(model_param)
+        
     model.eval()
     pred =  model(torch.as_tensor(test_data, dtype=torch.float32))
     result = pd.DataFrame({"customer_ID":test_id_dict.values(), 

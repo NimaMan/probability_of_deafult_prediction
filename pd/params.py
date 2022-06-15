@@ -14,8 +14,10 @@ elif sys.platform == 'win32':
     OUTDIR = "C:\\Users\\20204069\\Desktop\\Kaggle\\pd\\data\\out\\"
 
 elif sys.platform == 'linux':
-    DATADIR = "/home/nimamd/pd/data/"
-    OUTDIR = "/home/nimamd/pd/data/out/"
+	DATADIR = "/home/tue/20204069/pd/data/"
+	OUTDIR = "/home/tue/20204069/pd/data/out/"
+    #DATADIR = "/home/nimamd/pd/data/"
+    #OUTDIR = "/home/nimamd/pd/data/out/"
 
 # data
 dataCols = ['customer_ID', 'S_2', 'P_2', 'D_39', 'B_1', 'B_2', 'R_1', 'S_3', 'D_41','B_3',

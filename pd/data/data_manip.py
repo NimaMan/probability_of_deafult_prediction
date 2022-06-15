@@ -111,7 +111,7 @@ def write_test_npy(cols):
                                             train_labels=None, test_mode=True)
 
     np.save(OUTDIR+"test_data_all.npy", dtest)
-    with open(OUTDIR+'test_cuctomers_id_dict.json', 'w') as fp:
+    with open(OUTDIR+'test_customers_id_dict.json', 'w') as fp:
         json.dump(test_id_dict, fp)
 
 
