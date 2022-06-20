@@ -1,7 +1,6 @@
 import torch 
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
 from bes.nn.es_module import ESModule
 
 
@@ -49,7 +48,7 @@ class Conv(ESModule):
         self.conv1 = nn.Conv1d(in_channels=13, out_channels=25, kernel_size=5, )
         self.conv2 = nn.Conv1d(in_channels=25, out_channels=5, kernel_size=5, )
         self.conv3 = nn.Conv1d(in_channels=5, out_channels=1, kernel_size=3, )
-        self.fc1 = nn.Linear(in_features=154, out_features=hidden_dim)
+        self.fc1 = nn.Linear(in_features=63, out_features=hidden_dim)
         self.fc2 = nn.Linear(in_features=hidden_dim, out_features=1)
     def forward(self, h):
         h = F.selu(self.conv1(h))

@@ -160,8 +160,8 @@ ManCols = ["P_2", "B_1", "B_2", "R_1", "S_3", "D_41", "B_3",
     
 
 ## Learning 
-BATCH_SIZE = 15000
+BATCH_SIZE = 45000
 
 ## log 
-PerfThreshold = 0.77
+PerfThreshold = 0.795
 logBestIndiv = 20

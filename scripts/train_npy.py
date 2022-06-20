@@ -34,11 +34,12 @@ class CustomerData(Dataset):
 
 if __name__ == "__main__":
     
-    #my_cols = [col for col in ContCols if col not in MostNaNCols]
-    #write_train_npy(my_cols)
-    #write_test_npy(my_cols)
+    my_cols = [col for col in ContCols if col not in MostNaNCols]
+    my_cols = ManCols
+    write_train_npy(my_cols)
+    write_test_npy(my_cols)
 
-    model_name = "conv_all_b1000"
+    model_name = "conv_all_man_feat"
     train_data = np.load(OUTDIR+"train_data_all.npy")
     train_labels = np.load(OUTDIR+"train_labels_all.npy")
     train_dataset = CustomerData(train_data, train_labels=train_labels)
@@ -55,6 +56,6 @@ if __name__ == "__main__":
     del train_data
     del train_dataset
     
-    predict(model_name="conv_all")
+    predict(model, model_name=model_name)
 
 # %%

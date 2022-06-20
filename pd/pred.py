@@ -1,4 +1,5 @@
 
+import os
 import numpy as np
 import pandas as pd
 import torch 
@@ -35,7 +36,7 @@ def pred13(model):
     result.set_index("customer_ID").to_csv(OUTDIR+"sub.csv")
 
 
-def pred_test_npy(model=None, model_name="conv_all"):
+def pred_test_npy(model=None, model_name=""):
     test_data = np.load(OUTDIR+"test_data_all.npy")
     with open(OUTDIR+'test_customers_id_dict.json', 'r') as f:
             test_id_dict = json.load(f)
@@ -51,5 +52,5 @@ def pred_test_npy(model=None, model_name="conv_all"):
                         "prediction":pred.detach().numpy().reshape(-1)
                         }
                         )
-
-    result.set_index("customer_ID").to_csv(OUTDIR+"sub.csv")
+    sub_file_dir = os.path.join(OUTDIR, model_name + "sub.csv")
+    result.set_index("customer_ID").to_csv(sub_file_dir)

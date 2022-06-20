@@ -37,15 +37,6 @@ class CustomerData(Dataset):
             return feat, customer_label
 
 
-
-def rollout_with_batch(model, feat):
-    feat, labels  = load_data()
-    pred = model(feat)
-    reward = amex_metric(labels, pred.detach().numpy())
-    
-    return reward
-
-
 @ray.remote
 def worker_with_batch(model, weights, feat, labels):
     model.eval()
@@ -80,10 +71,22 @@ def get_candidate_rewards_batch_data(candidates, model, feat, labels):
     return rewards
 
 
-def run_with_ray_send_data_to_worker(model_cls, population_size, num_cma_iterations, tempdir, model_kwargs={} ):
+def get_intial_model_params(model_cls, model_name):
+    model = model_cls()
+    model_param = torch.load(OUTDIR+model_name)
+    model.load_state_dict(model_param)
+    
+    return model
+
+def run_with_ray_send_data_to_worker(model_cls, population_size, num_cma_iterations, tempdir, model_kwargs={}, init_model_name=None ):
     
     model = model_cls()
-    es = BES(model, popsize=population_size)
+    init_params = None
+    if init_model_name is not None:
+        model = get_intial_model_params(model_cls, model_name=init_model_name)
+        init_params = model.get_model_flat_params()
+    
+    es = BES(model, popsize=population_size, init_params=init_params)
     training_history = []
     train_data = np.load(OUTDIR+"train_data_all.npy")
     train_labels = np.load(OUTDIR+"train_labels_all.npy")
@@ -107,7 +110,8 @@ def run_with_ray_send_data_to_worker(model_cls, population_size, num_cma_iterati
                 best_reward = rewards[best_idx]
                 if best_reward > PerfThreshold:
                     model.set_model_params(best_weights)
-                    pred_test_npy(model, reward=best_reward)
+                    output_name = f"{init_model_name}_{int(1000*best_reward)}"
+                    pred_test_npy(model, model_name=output_name)
 
             es.tell(rewards)
 
@@ -116,12 +120,14 @@ def run_with_ray_send_data_to_worker(model_cls, population_size, num_cma_iterati
 @click.option("--population-size", default=5, type=int)
 @click.option("--num-cma-iterations", default=400, type=int)
 @click.option("--n-workers", default=5)
-def run_experiment(population_size, num_cma_iterations, n_workers):
+@click.option("--init_params", default=None)
+def run_experiment(population_size, num_cma_iterations, n_workers, init_params):
 
     run_info = dict(
         model_class_name=str(Conv),
         population_size=population_size,
         num_cma_iterations=num_cma_iterations,
+        init_model_name=init_params
     )
 
     tempdir = tempfile.mkdtemp(prefix="pd_", dir=OUTDIR)
@@ -134,6 +140,7 @@ def run_experiment(population_size, num_cma_iterations, n_workers):
         population_size,
         num_cma_iterations,
         tempdir,
+        init_model_name=init_params
     )
     ray.shutdown()
 
