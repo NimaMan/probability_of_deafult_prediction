@@ -7,6 +7,7 @@ import torch
 import ray
 import tempfile
 import json
+from sklearn.model_selection import train_test_split
 
 from bes.es import CMAES, BES
 from pd.nn.model import Conv
@@ -79,17 +80,27 @@ def get_intial_model_params(model_cls, model_name):
     return model
 
 def run_with_ray_send_data_to_worker(model_cls, population_size, num_cma_iterations, tempdir, model_kwargs={}, init_model_name=None ):
-    
+    train_method = "bcma"
     model = model_cls()
     init_params = None
     if init_model_name is not None:
         model = get_intial_model_params(model_cls, model_name=init_model_name)
         init_params = model.get_model_flat_params()
-    
-    es = BES(model, popsize=population_size, init_params=init_params)
+    if train_method == "cma":
+        es = CMAES(model.num_params, popsize=population_size, sigma_init=5)
+    else:
+        es = BES(model, popsize=population_size, init_params=init_params, max_block_width=1000, sigma_init=5)
+
     training_history = []
     train_data = np.load(OUTDIR+"train_data_all.npy")
     train_labels = np.load(OUTDIR+"train_labels_all.npy")
+    X_train, X_test, y_train, y_test = train_test_split(train_data, train_labels, test_size=1/9, random_state=0, shuffle=True)
+
+    train_dataset = CustomerData(X_train, train_labels=y_train)
+    train_loader = DataLoader(train_dataset, batch_size=500)
+
+    validation_data = (X_test, y_test)
+    
     train_dataset = CustomerData(train_data, train_labels=train_labels)
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE)
 
@@ -110,8 +121,12 @@ def run_with_ray_send_data_to_worker(model_cls, population_size, num_cma_iterati
                 best_reward = rewards[best_idx]
                 if best_reward > PerfThreshold:
                     model.set_model_params(best_weights)
-                    output_name = f"{init_model_name}_{int(1000*best_reward)}"
-                    pred_test_npy(model, model_name=output_name)
+                    val_features = torch.as_tensor(X_test, dtype=torch.float32)
+                    val_pred = model(val_features)
+                    val_metrix = amex_metric(y_test, val_pred.detach().numpy())
+                    if val_metrix > PerfThreshold:
+                        output_name = f"{init_model_name}_{int(1000*best_reward)}"
+                        pred_test_npy(model, model_name=output_name)
 
             es.tell(rewards)
 

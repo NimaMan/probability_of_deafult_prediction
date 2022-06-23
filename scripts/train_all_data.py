@@ -7,7 +7,7 @@ import torch.nn
 from torch.utils.data import Dataset, DataLoader
 from pd.nn.model import MLP, Conv
 from pd.data.data_manip import write_train_npy, write_test_npy
-from pd.nn.train_utils import train
+from pd.nn.train_utils import train_torch_model
 from pd.metric import amex_metric
 from pd.params import *
     
@@ -65,7 +65,7 @@ if __name__ == "__main__":
 
     model = Conv()
 
-    model = train(model, train_loader, num_epochs=15)
+    model = train_torch_model(model, train_loader, num_epochs=15)
     torch.save(model.state_dict(), OUTDIR+model_name)
     pred = model(torch.as_tensor(train_data, dtype=torch.float32))
     m =  amex_metric(train_labels, pred.detach().numpy())

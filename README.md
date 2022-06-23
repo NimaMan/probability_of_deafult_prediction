@@ -18,12 +18,16 @@ The fists step from the data side could be only working with the dataset of the 
 
 # todo
 ## Major
-- Try the es on the conv net
-- Determine different thresholds for feature selection 
+- Determine different thresholds for feature selection
+- normalize data with the quantiles (or quntile transfomer) 
 - Add the cat variables to the model
 - predict the NaN data using the rest of the data
 
 ## Details
+- Try es on the conv net with initial trained start -> smapling from a relvatively okay model starts with a worse
+    - try the cmaes itself (did not perform the best with a big batch size and not init params)
+    - paly around with the sigma_init (submitted a bcmaes with 5)
+- 
 - add get name to the models itself
 - experiment with different sets of columns (for now just focus on the cont)
 - try conv net with shuffeling (did not affect the traning procedure much)

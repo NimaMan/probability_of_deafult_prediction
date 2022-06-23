@@ -54,3 +54,21 @@ def pred_test_npy(model=None, model_name=""):
                         )
     sub_file_dir = os.path.join(OUTDIR, model_name + "sub.csv")
     result.set_index("customer_ID").to_csv(sub_file_dir)
+
+
+def pred_test_npy_model_params(model_params, model_name=""):
+    test_data = np.load(OUTDIR+"test_data_all.npy")
+    with open(OUTDIR+'test_customers_id_dict.json', 'r') as f:
+            test_id_dict = json.load(f)
+
+    model = Conv()        
+    model.set_model_flat_params(model_params)
+    model.eval()
+    pred =  model(torch.as_tensor(test_data, dtype=torch.float32))
+    result = pd.DataFrame({"customer_ID":test_id_dict.values(), 
+                        "prediction":pred.detach().numpy().reshape(-1)
+                        }
+                        )
+    sub_file_dir = os.path.join(OUTDIR, model_name + "sub.csv")
+    result.set_index("customer_ID").to_csv(sub_file_dir)
+
