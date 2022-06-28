@@ -16,12 +16,17 @@ The fists step from the data side could be only working with the dataset of the 
 ### Features
 
 
+# Findings
+- REsidual + averaging performs okay 
+
 # todo
 ## Major
 - Determine different thresholds for feature selection
 - normalize data with the quantiles (or quntile transfomer) 
 - Add the cat variables to the model
 - predict the NaN data using the rest of the data
+- Add the catboost, look into its implementaion. Checkout how we do it with mixed integer linear programing. 
+
 
 ## Details
 - Try es on the conv net with initial trained start -> smapling from a relvatively okay model starts with a worse

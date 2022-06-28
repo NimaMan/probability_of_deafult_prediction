@@ -38,10 +38,16 @@ if __name__ == "__main__":
     
     my_cols = [col for col in ContCols if col not in MostNaNCols]
     my_cols = ManCols
-    #write_train_npy(my_cols)
-    #write_test_npy(my_cols)
 
-    model_name = "conv_all_man_feat"
+    my_cols = []
+    for c in col_info.keys():
+        if col_info[c]["max_prob_mass"] < 90:
+            my_cols.append(c)
+
+    #write_train_npy(my_cols, col_info=col_info)
+    #write_test_npy(my_cols, col_info=col_info)
+
+    model_name = "conv_90"
     train_data = np.load(OUTDIR+"train_data_all.npy")
     train_labels = np.load(OUTDIR+"train_labels_all.npy")
     X_train, X_test, y_train, y_test = train_test_split(train_data, train_labels, test_size=1/9, random_state=0, shuffle=True)
