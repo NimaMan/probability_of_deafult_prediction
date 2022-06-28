@@ -45,17 +45,31 @@ class Conv(ESModule):
         super(Conv, self).__init__()
         self.hidden_dim = hidden_dim
         self.output_dim = output_dim
-        self.conv1 = nn.Conv1d(in_channels=13, out_channels=25, kernel_size=5, )
-        self.conv2 = nn.Conv1d(in_channels=25, out_channels=5, kernel_size=5, )
-        self.conv3 = nn.Conv1d(in_channels=5, out_channels=1, kernel_size=3, )
-        self.fc1 = nn.Linear(in_features=63, out_features=hidden_dim)
-        self.fc2 = nn.Linear(in_features=hidden_dim, out_features=1)
+        self.conv1 = nn.Conv1d(in_channels=13, out_channels=25, kernel_size=3, )
+        self.n1 = nn.LayerNorm([25,112])
+        self.conv2 = nn.Conv1d(in_channels=25, out_channels=25, kernel_size=3, padding=1)
+        self.n2 = nn.LayerNorm([25, 112])
+        self.conv3 = nn.Conv1d(in_channels=25, out_channels=25, kernel_size=3, padding=1)
+        self.n3 = nn.LayerNorm([25, 112])
+        self.fc1 = nn.Linear(in_features=25*112, out_features=hidden_dim)
+        self.fc2 = nn.Linear(in_features=hidden_dim, out_features=hidden_dim)
+        self.fc3 = nn.Linear(in_features=hidden_dim, out_features=hidden_dim)
+        
+        self.fcout = nn.Linear(in_features=hidden_dim, out_features=1)
     def forward(self, h):
-        h = F.selu(self.conv1(h))
-        h = F.selu(self.conv2(h))
-        h = F.selu(self.conv3(h))
-        h = F.selu(self.fc1(h))
-        return torch.sigmoid(self.fc2(h)).squeeze(-1)
+        h = F.gelu(self.conv1(h))
+        r = self.n1(h)
+        h = F.gelu(self.conv2(r))
+        h = self.n2(h)
+        h = F.gelu(self.conv3(h))
+        r = self.n3(h+r) 
+        #h = torch.mean(h, axis=1,)
+        h = h.view(-1, 25*112)
+        r = F.gelu(self.fc1(h))
+        h = F.gelu(self.fc2(r))
+        h = F.selu(self.fc3(h)) + r
+
+        return torch.sigmoid(self.fcout(h))
 
 
 class CatEndModel(nn.Module):
