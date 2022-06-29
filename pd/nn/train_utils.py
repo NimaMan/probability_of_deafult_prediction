@@ -6,6 +6,7 @@ import torch
 from pd.metric import amex_metric
 from pd.params import *
 from pd.pred import pred_test_npy as predict
+from pd.utils import write_log
 
 
 def train_torch_model(model, train_loader, validation_data=None, num_epochs=45, output_model_name="", tempdir=None):
@@ -35,7 +36,10 @@ def train_torch_model(model, train_loader, validation_data=None, num_epochs=45, 
                 val_pred = model(val_features)
                 val_metrix = amex_metric(y_test, val_pred.detach().numpy())
 
-            print(f"{epoch}, BCE loss: {loss.item():.3f}, amex train: {model_metric:.3f}, val {val_metrix:.3f}")
+            log_message = f"{epoch}, BCE loss: {loss.item():.3f}, amex train: {model_metric:.3f}, val {val_metrix:.3f}"
+            print(log_message)
+            write_log(log=log_message, log_desc="log", out_dir=tempdir)
+
             if val_metrix > PerfThreshold:
                 output = output_model_name + f"_{int(1000*model_metric)}_{epoch}_{idx}"
                 output_file = os.path.join(tempdir, output)

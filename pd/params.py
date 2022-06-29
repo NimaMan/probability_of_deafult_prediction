@@ -30,8 +30,7 @@ try:
 	with open(OUTDIR+"col_info.pkl", "rb") as f:
 		col_info = pickle.load(f)
 except Exception:
-	from pd.data.data_manip import get_col_info
-	col_info = get_col_info() 
+	pass
 
 # data
 dataCols = ['customer_ID', 'S_2', 'P_2', 'D_39', 'B_1', 'B_2', 'R_1', 'S_3', 'D_41','B_3',

@@ -3,6 +3,15 @@ import pickle
 import gzip 
 
 
+def write_log(log, log_desc="log", out_dir=None):
+    log_file_name = f"{log_desc}.txt"
+    os.makedirs(out_dir, exist_ok=True)
+    log_file_dir = os.path.join(out_dir, log_file_name)
+    with open(log_file_dir, "a") as f:
+        f.write(log)
+        f.write("\n")
+
+
 def wirte_data_pickle(data, name, outdir=None):
 
     if outdir is not None:
