@@ -176,7 +176,9 @@ class DTwithLabelRatio(Dataset):
     def __len__(self):
         #return len(self.train_labels)//self.batch_size
         # cover all the ones data since there are less of them
-        return int(len(self.ones_indices)//(self.batch_size*self.ones_ratio)) + 1
+        #return int(len(self.ones_indices)//(self.batch_size*self.ones_ratio)) + 1
+        # Cover all the zeros using ones repeetitively
+        return int(len(self.zeros_indices)//(self.batch_size*(1-self.ones_ratio))) + 1
 
     def __getitem__(self, index): 
         indices = self.smaple_data_label_ratio_with_pred_determined_indices(index, ones_ratio=self.ones_ratio)
@@ -211,12 +213,14 @@ class DTwithLabelRatio(Dataset):
         return ones_indices, zeros_indices
 
     def smaple_data_label_ratio_with_pred_determined_indices(self, index, ones_ratio=0.5):
-        #ones_upper_limit = len(self.ones_indices)//(self.batch_size*ones_ratio) + 1
+        ones_upper_limit = len(self.ones_indices)//(self.batch_size*ones_ratio) + 1
         zeros_upper_limit = len(self.zeros_indices)//(self.batch_size*ones_ratio) + 1
         
-        #ones_random_batch_index = np.random.randint(low=0, high=ones_upper_limit)
-        ones_random_batch_index = index
-        zeros_random_batch_index = np.random.randint(low=0, high=zeros_upper_limit)
+        ones_random_batch_index = np.random.randint(low=0, high=ones_upper_limit)
+        #ones_random_batch_index = index
+        
+        #zeros_random_batch_index = np.random.randint(low=0, high=zeros_upper_limit)
+        zeros_random_batch_index = index
         ones_sample_indices, zeros_sample_indices = self.get_smaple_indices_covering_all_ones_data(idx_ones=ones_random_batch_index, idx_zeros=zeros_random_batch_index, ones_ratio=ones_ratio)
         
         return np.concatenate((ones_sample_indices, zeros_sample_indices))
