@@ -16,8 +16,6 @@ from pd.params import *
 from pd.pred import pred_test_npy as predict
 
 
-
-
 if __name__ == "__main__":
     
     model_name = "conv_90_equal_ratio"

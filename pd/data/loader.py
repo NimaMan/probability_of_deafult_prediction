@@ -176,7 +176,7 @@ class DTwithLabelRatio(Dataset):
         return len(self.train_labels//self.batch_size)
 
     def __getitem__(self, index): 
-        indices = self.smaple_data_with_label_ratio(self.train_labels, self.batch_size, ones_ratio=self.ones_ratio)
+        indices = self.smaple_data_with_label_ratio(self.batch_size, ones_ratio=self.ones_ratio)
         
         feat =  torch.as_tensor(self.data[indices], dtype=torch.float32)
         customer_label = torch.as_tensor(self.train_labels[indices], dtype=torch.float32)
