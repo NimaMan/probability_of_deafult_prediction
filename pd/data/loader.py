@@ -13,7 +13,7 @@ def agg_cat_cont_feat(cont_feat, cat_feat, agg_type="contOnly"):
         return cat_feat
 
 
-class CustomerData(Dataset):
+class CustomerDataPDDataFrame(Dataset):
     def __init__(self, data, cat_cols=[], test_mode=False, train_labels=None):
         self.data = data
         self.test_mode = test_mode
@@ -138,6 +138,71 @@ def load_npy_data(batch_size, seed=None):
 
     return d[batch_indices], train_labels[batch_indices]
 
+
+class CustomerData(Dataset):
+    def __init__(self, data:np.array, test_mode=False, train_labels=None):
+        self.data = data
+        self.test_mode = test_mode
+        self.train_labels = train_labels
+        
+    def __len__(self):
+        return len(self.train_labels)
+
+    def __getitem__(self, index):        
+        feat =  torch.as_tensor(self.data[index], dtype=torch.float32)
+
+        if self.test_mode:
+            return feat, index
+        else:
+            customer_label = torch.as_tensor(self.train_labels[index], dtype=torch.float32)
+            return feat, customer_label
+
+
+class DTwithLabelRatio(Dataset):
+    """
+    Currently, we are randomly sampling data from ones and zeros with given ratio. 
+    This is not guaranteed to use all the data. The next version may take that into account
+    """
+    def __init__(self, data:np.array, test_mode=False, train_labels=None, batch_size=2, ones_ratio=0.5):
+        self.data = data
+        self.train_labels = train_labels
+        self.ones_ratio = ones_ratio
+        self.batch_size = batch_size
+        self.ones_indices = np.argwhere(train_labels==1)[:, 0]
+        self.zeros_indices = np.argwhere(train_labels==0)[:, 0]
+        
+        
+    def __len__(self):
+        return len(self.train_labels//self.batch_size)
+
+    def __getitem__(self, index): 
+        indices = self.smaple_data_with_label_ratio(self.train_labels, self.batch_size, ones_ratio=self.ones_ratio)
+        
+        feat =  torch.as_tensor(self.data[indices], dtype=torch.float32)
+        customer_label = torch.as_tensor(self.train_labels[indices], dtype=torch.float32)
+        
+        return feat, customer_label
+
+    def smaple_data_with_label_ratio(self, batch_size, ones_ratio=0.5):
+        # This will not use all the training data and some data will be used repetitivly 
+        ones_smaple_size = int(batch_size*ones_ratio)
+        zeros_smaple_size = batch_size - ones_smaple_size
+        ones_sample_indices = np.random.randint(low=0, high=len(self.ones_indices), size=ones_smaple_size)
+        zeros_sample_indices = np.random.randint(low=0, high=len(self.zeros_indices), size=zeros_smaple_size)
+
+        return np.concatenate((ones_sample_indices, zeros_sample_indices))
+
+    def smaple_data_label_ratio_with_pred_determined_indices(self, batch_size, ones_ratio=0.5):
+        ones_smaple_size = int(batch_size*ones_ratio)
+        zeros_smaple_size = batch_size - ones_smaple_size
+        # Choose a random index for ones (make sure you include all the data)
+        
+        # Choose a random index from zeros
+        
+
 if __name__ == "__main__":
-    (cont_feat, cat_feat), labels = load_data(train=True,)
+    from sklearn.model_selection import train_test_split
+    train_data = np.load(OUTDIR+"train_data_all.npy")
+    train_labels = np.load(OUTDIR+"train_labels_all.npy")
+    X_train, X_test, y_train, y_test = train_test_split(train_data, train_labels, test_size=1/9, random_state=0, shuffle=True)
 # %%

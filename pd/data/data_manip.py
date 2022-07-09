@@ -23,6 +23,7 @@ def get_col_info(col_info_name="col_info"):
         col_info[c]["max"] = col_max_val
         col_info[c]["hist"] = hist
         col_info[c]["max_prob_mass"] = hist[0].max()
+        col_info[c]["num_nonzero_bins"] = np.count_nonzero(hist[0])
         
     with open(OUTDIR+f"{col_info_name}.pkl", "wb") as f:
         pickle.dump(col_info, f)
