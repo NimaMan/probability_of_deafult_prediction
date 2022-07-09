@@ -22,14 +22,14 @@ if __name__ == "__main__":
     train_data = np.load(OUTDIR+"train_data_all.npy")
     train_labels = np.load(OUTDIR+"train_labels_all.npy")
     X_train, X_test, y_train, y_test = train_test_split(train_data, train_labels, test_size=1/9, random_state=0, shuffle=True)
-
-    #train_dataset = CustomerData(X_train, train_labels=y_train)
-    #train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE)
-
-    train_dataset = DTwithLabelRatio(X_train, train_labels=y_train, batch_size=BATCH_SIZE)
-    train_loader = DataLoader(train_dataset, batch_size=1)
-
     validation_data = (X_test, y_test)
+
+    train_dataset = CustomerData(X_train, train_labels=y_train)
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE)
+
+    #train_dataset = DTwithLabelRatio(X_train, train_labels=y_train, batch_size=BATCH_SIZE)
+    #train_loader = DataLoader(train_dataset, batch_size=1)
+
     
     model = Conv()
     model = train_torch_model(model, train_loader, num_epochs=100, validation_data=validation_data, 

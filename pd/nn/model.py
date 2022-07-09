@@ -41,7 +41,7 @@ class MLP(ESModule):
 
 class Conv(ESModule):
 
-    def __init__(self, input_dim=114, hidden_dim=64, output_dim=1, conv_channels=13):
+    def __init__(self, input_dim=114, hidden_dim=128, output_dim=1, conv_channels=13):
         super(Conv, self).__init__()
         self.hidden_dim = hidden_dim
         self.input_dim = input_dim
