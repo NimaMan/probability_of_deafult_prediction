@@ -1,6 +1,7 @@
 #%%
 import numpy as np
-import pandas as pd 
+import pandas as pd
+from sklearn.utils import shuffle 
 import torch 
 from torch.utils.data import Dataset, DataLoader
 from pd.params import *
@@ -163,7 +164,7 @@ class DTwithLabelRatio(Dataset):
     Currently, we are randomly sampling data from ones and zeros with given ratio. 
     This is not guaranteed to use all the data. The next version may take that into account
     """
-    def __init__(self, data:np.array, test_mode=False, train_labels=None, batch_size=2, ones_ratio=0.5):
+    def __init__(self, data:np.array, train_labels, test_mode=False, batch_size=2, ones_ratio=0.5):
         self.data = data
         self.train_labels = train_labels
         self.ones_ratio = ones_ratio
@@ -173,32 +174,53 @@ class DTwithLabelRatio(Dataset):
         
         
     def __len__(self):
-        return len(self.train_labels//self.batch_size)
+        #return len(self.train_labels)//self.batch_size
+        # cover all the ones data since there are less of them
+        return int(len(self.ones_indices)//(self.batch_size*self.ones_ratio)) + 1
 
     def __getitem__(self, index): 
-        indices = self.smaple_data_with_label_ratio(self.batch_size, ones_ratio=self.ones_ratio)
+        indices = self.smaple_data_label_ratio_with_pred_determined_indices(index, ones_ratio=self.ones_ratio)
         
         feat =  torch.as_tensor(self.data[indices], dtype=torch.float32)
         customer_label = torch.as_tensor(self.train_labels[indices], dtype=torch.float32)
         
         return feat, customer_label
 
-    def smaple_data_with_label_ratio(self, batch_size, ones_ratio=0.5):
+    def smaple_data_with_label_ratio(self, ones_ratio=0.5):
         # This will not use all the training data and some data will be used repetitivly 
-        ones_smaple_size = int(batch_size*ones_ratio)
-        zeros_smaple_size = batch_size - ones_smaple_size
+        ones_smaple_size = int(self.batch_size*ones_ratio)
+        zeros_smaple_size = self.batch_size - ones_smaple_size
         ones_sample_indices = np.random.randint(low=0, high=len(self.ones_indices), size=ones_smaple_size)
         zeros_sample_indices = np.random.randint(low=0, high=len(self.zeros_indices), size=zeros_smaple_size)
 
         return np.concatenate((ones_sample_indices, zeros_sample_indices))
 
-    def smaple_data_label_ratio_with_pred_determined_indices(self, batch_size, ones_ratio=0.5):
-        ones_smaple_size = int(batch_size*ones_ratio)
-        zeros_smaple_size = batch_size - ones_smaple_size
-        # Choose a random index for ones (make sure you include all the data)
+    def get_smaple_indices_covering_all_ones_data(self, idx_ones, idx_zeros, ones_ratio=0.5):
+        ones_smaple_size = int(self.batch_size*ones_ratio)
+        if (idx_ones+1)*ones_smaple_size < len(self.ones_indices):
+            ones_indices = self.ones_indices[idx_ones*ones_smaple_size: (idx_ones+1)*ones_smaple_size]
+        else:
+            ones_indices = self.ones_indices[idx_ones*ones_smaple_size:]
         
-        # Choose a random index from zeros
+        zeros_smaple_size = self.batch_size - ones_smaple_size
+        if (idx_zeros+1)*zeros_smaple_size < len(self.zeros_indices):
+            zeros_indices = self.zeros_indices[idx_zeros*zeros_smaple_size: (idx_zeros+1)*zeros_smaple_size]
+        else:
+            zeros_indices = self.zeros_indices[idx_zeros*zeros_smaple_size:]
         
+        return ones_indices, zeros_indices
+
+    def smaple_data_label_ratio_with_pred_determined_indices(self, index, ones_ratio=0.5):
+        #ones_upper_limit = len(self.ones_indices)//(self.batch_size*ones_ratio) + 1
+        zeros_upper_limit = len(self.zeros_indices)//(self.batch_size*ones_ratio) + 1
+        
+        #ones_random_batch_index = np.random.randint(low=0, high=ones_upper_limit)
+        ones_random_batch_index = index
+        zeros_random_batch_index = np.random.randint(low=0, high=zeros_upper_limit)
+        ones_sample_indices, zeros_sample_indices = self.get_smaple_indices_covering_all_ones_data(idx_ones=ones_random_batch_index, idx_zeros=zeros_random_batch_index, ones_ratio=ones_ratio)
+        
+        return np.concatenate((ones_sample_indices, zeros_sample_indices))
+
 
 if __name__ == "__main__":
     from sklearn.model_selection import train_test_split

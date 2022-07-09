@@ -20,6 +20,7 @@ def train_torch_model(model, train_loader, validation_data=None, num_epochs=45, 
         for idx, (feat, clabel) in enumerate(train_loader):
             if len(feat.shape) == 4:  ## Reduce shape if its coming from a ratio version of the loader
                 feat = feat.squeeze(dim=0)
+                clabel = clabel.squeeze(dim=0)
 
             pred = model(feat)
             #weight = clabel.clone()
