@@ -12,7 +12,7 @@ from pd.utils import write_log
 def train_torch_model(model, train_loader, validation_data=None, num_epochs=45, output_model_name="", tempdir=None):
     optimizer = torch.optim.Adam(model.parameters(),)
     criterion = torch.nn.BCELoss()
-    criterion = sigmoid_focal_loss
+    #criterion = sigmoid_focal_loss
 
     if tempdir is None:
         tempdir = tempfile.mkdtemp(prefix=f"train_torch_{output_model_name}_", dir=OUTDIR)
