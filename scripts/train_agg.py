@@ -117,7 +117,7 @@ del train_data
 gc.collect()
 
 
-mlp = train_mlp(X, train_labels)
+mlp = train_mlp(X, train_labels, num_epochs=30)
 mlp_pred, mlp_feat =  mlp(torch.as_tensor(X, dtype=torch.float32), return_featues=True)
 
 del X
@@ -127,10 +127,15 @@ model_name = "conv_90_780_18_5"
 conv = Conv()
 model_param = torch.load(OUTDIR+model_name)
 conv.load_state_dict(model_param)
+cont_data = np.load(OUTDIR+"train_data_all.npy")
+conv_pred, conv_feat =  conv(torch.as_tensor(cont_data, dtype=torch.float32), return_featues=True)
 
-conv_pred, conv_feat =  conv(torch.as_tensor(np.load(OUTDIR+"train_data_all.npy"), dtype=torch.float32), return_featues=True)
-
-X = torch.cat((mlp_feat, conv_feat), dim=-1)
-train_mlp(X, train_labels, model_name="mlp_agg")
+X = torch.cat((mlp_feat, conv_feat, mlp_pred, conv_pred), dim=-1)
+del cont_data
+del conv_feat
+del mlp_feat
+gc.collect()
+np.save(OUTDIR+"agg_feat.npy", X.detach().numpy())
+#train_mlp(X, train_labels, model_name="mlp_agg")
 
 #%%

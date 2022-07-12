@@ -3,7 +3,7 @@ import os
 import tempfile
 
 import torch 
-from pd.metric import amex_metric
+from pd.metric import amex_metric, sigmoid_focal_loss
 from pd.params import *
 from pd.pred import pred_test_npy as predict
 from pd.utils import write_log
@@ -12,6 +12,7 @@ from pd.utils import write_log
 def train_torch_model(model, train_loader, validation_data=None, num_epochs=45, output_model_name="", tempdir=None):
     optimizer = torch.optim.Adam(model.parameters(),)
     criterion = torch.nn.BCELoss()
+    criterion = sigmoid_focal_loss
 
     if tempdir is None:
         tempdir = tempfile.mkdtemp(prefix=f"train_torch_{output_model_name}_", dir=OUTDIR)
@@ -42,7 +43,7 @@ def train_torch_model(model, train_loader, validation_data=None, num_epochs=45, 
 
             log_message = f"{epoch}, BCE loss: {loss.item():.3f}, amex train: {model_metric:.3f}, val {val_metrix:.3f}"
             print(log_message)
-            write_log(log=log_message, log_desc="log", out_dir=tempdir)
+            write_log(log=log_message, log_desc=output_model_name+"_log", out_dir=tempdir)
 
             if val_metrix > PerfThreshold:
                 output = output_model_name + f"_{int(1000*model_metric)}_{epoch}_{idx}"
