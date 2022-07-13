@@ -1,4 +1,7 @@
 #%%
+import os
+os.environ['KMP_DUPLICATE_LIB_OK']='True'
+
 import gc
 import json
 import numpy as np
