@@ -23,4 +23,4 @@ if __name__ == "__main__":
     #write_test_npy(my_cols)
 
     preprocess_data(data_type="train")
-    preprocess_data(data_type="test")
+    #preprocess_data(data_type="test")

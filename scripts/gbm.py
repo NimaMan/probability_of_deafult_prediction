@@ -43,9 +43,9 @@ def lgb_amex_metric(y_pred, y_true):
     return 'amex_metric', amex_metric(y_true, y_pred), True
 
 
-def train_lgbm_single_feature(data, feature, params, tempdir=None, n_folds=5, seed=42):
+def train_lgbm_single_feature(data, f, feature, params, tempdir=None, n_folds=5, seed=42):
     cat_feature = "auto"
-    if feature in CATCOLS:
+    if f in CATCOLS:
         cat_feature = feature
     oof_predictions = np.zeros(len(data))
     kfold = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=seed)
@@ -60,7 +60,7 @@ def train_lgbm_single_feature(data, feature, params, tempdir=None, n_folds=5, se
         model = lgb.train(
             params = params,
             train_set = lgb_train,
-            num_boost_round = 10500,
+            num_boost_round = 1000,
             valid_sets = [lgb_train, lgb_valid],
             early_stopping_rounds = 100,
             verbose_eval = 100,
@@ -86,17 +86,18 @@ def train_lgbm_single_feature(data, feature, params, tempdir=None, n_folds=5, se
 
 
 @ray.remote
-def worker_fn(data, feature, params):
-    return train_lgbm_single_feature(data, feature, params)
+def worker_fn(data, f, feature, params):
+    return train_lgbm_single_feature(data, f, feature, params)
 
 
 def get_features_scores(data, features, params):
     candidate_rewards_tracker = {}
     candidate_rewards = {}
     remaining_ids = []
-    for idx, feat in enumerate(features):
-        df = data[[feat, "target"]]
-        indiv_remote_id = worker_fn.remote(df, feat, params)
+    for idx, f in enumerate(features.keys()):
+        feat = features[f]
+        df = data[feat + ["customer_ID", "target"]]
+        indiv_remote_id = worker_fn.remote(df, f, feat, params)
         remaining_ids.append(indiv_remote_id)
         candidate_rewards_tracker[indiv_remote_id] = idx
 
@@ -115,7 +116,7 @@ def get_features_scores(data, features, params):
 
 @click.command()
 @click.option("--n-workers", default=32)
-def run_experiment(population_size, num_cma_iterations, n_workers):
+def run_experiment(n_workers):
 
     params = {
         'objective': 'binary',
@@ -134,7 +135,7 @@ def run_experiment(population_size, num_cma_iterations, n_workers):
 
     run_info = params
 
-    tempdir = tempfile.mkdtemp(prefix="pd_lgbm", dir=OUTDIR)
+    tempdir = tempfile.mkdtemp(prefix="pd_lgbm_", dir=OUTDIR)
     with open(os.path.join(tempdir, "run_info.json"), "w") as fh:
         json.dump(run_info, fh, indent=4)
 
@@ -146,13 +147,18 @@ def run_experiment(population_size, num_cma_iterations, n_workers):
     for cat_col in cat_features:
         encoder = LabelEncoder()
         train[cat_col] = encoder.fit_transform(train[cat_col])
+    
     # Round last float features to 2 decimal place
     num_cols = list(train.dtypes[(train.dtypes == 'float32') | (train.dtypes == 'float64')].index)
     num_cols = [col for col in num_cols if 'last' in col]
     for col in num_cols:
         train[col + '_round2'] = train[col].round(2)
     
-    features = [col for col in train.columns if col not in ['customer_ID', "S_2", "target"]]
+    features = {}
+    for col in dataCols:
+        if col not in ['customer_ID', "S_2", "target"]:
+            features[col] = [c for c in train.columns if col+"_" in c]
+            
     scores = get_features_scores(train, features, params)
     with open(os.path.join(tempdir, "scores.json"), "w") as fh:
         json.dump(scores, fh, indent=4)
