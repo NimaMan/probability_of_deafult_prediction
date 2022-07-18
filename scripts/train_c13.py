@@ -1,78 +1,44 @@
 #%%
+import gc
 import json
 import numpy as np
 import pandas as pd
 import torch 
 import torch.nn 
 from torch.utils.data import Dataset, DataLoader
-from pd.nn.model import MLP, Conv
-from pd.nn.train_utils import train_torch_model
+from sklearn.model_selection import train_test_split
 
+from pd.nn.model import Conv
+from pd.data.loader import CustomerData
+from pd.nn.train_utils import train_torch_model
 from pd.metric import amex_metric
 from pd.params import *
-    
-
-class CustomerData(Dataset):
-    def __init__(self, data:np.array, test_mode=False, train_labels=None):
-        self.data = data
-        self.test_mode = test_mode
-        self.train_labels = train_labels
-        
-    def __len__(self):
-        return len(self.train_labels)
-
-    def __getitem__(self, index):        
-        feat =  torch.as_tensor(self.data[index], dtype=torch.float32)
-
-        if self.test_mode:
-            return feat, index
-        else:
-            customer_label = torch.as_tensor(self.train_labels[index], dtype=torch.float32)
-            return feat, customer_label
-
-
-def eval(model):
-    test_customers = pd.read_parquet(DATADIR+"test_data.parquet", columns=["customer_ID"])
-    test_customer_ids = test_customers.customer_ID.unique()
-
-    test_data = np.load(OUTDIR+"test_data_c13.npy")
-
-    with open(OUTDIR+'test_c13_id_dict.json', 'r') as f:
-            test_id_dict = json.load(f)
-
-    #model = Conv()
-    #model_param = torch.load(OUTDIR+"Conv")
-    #model.load_state_dict(model_param)
-    model.eval()
-
-    pred =  model(torch.as_tensor(test_data, dtype=torch.float32))
-
-    result = pd.DataFrame({"customer_ID":test_id_dict.values(), 
-                        "prediction":pred.detach().numpy().reshape(-1)
-                        }
-                        )
-
-    not13_customers = set(test_customer_ids) - set(test_id_dict.values())
-    not13_prediction = pd.DataFrame({"customer_ID":list(not13_customers), "prediction":np.zeros(len(not13_customers))})
-    result = result.append(not13_prediction)
-    result.set_index("customer_ID").to_csv(OUTDIR+"sub.csv")
+from pd.pred import pred_test_npy as predict
 
 
 if __name__ == "__main__":
+    
+    model_name = "conv13_all"
+    train_data = np.load(OUTDIR+"c13_data.npy")
+    train_labels = np.load(OUTDIR+"c13_labels.npy")
+    X_train, X_test, y_train, y_test = train_test_split(train_data, train_labels, test_size=1/9, random_state=0, shuffle=True)
+    validation_data = (X_test, y_test)
 
-    model_name = "conv13"
-    train_data = np.load(OUTDIR+"train_data_c13.npy")
-    train_labels = np.load(OUTDIR+"train_labels_c13.npy")
-    train_dataset = CustomerData(train_data, train_labels=train_labels)
+    train_dataset = CustomerData(X_train, train_labels=y_train)
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE)
 
-    model = Conv()
+    #train_dataset = DTwithLabelRatio(X_train, train_labels=y_train, batch_size=BATCH_SIZE)
+    #train_loader = DataLoader(train_dataset, batch_size=1)
 
-    model = train_torch_model(model, train_loader, num_epochs=15)
+    
+    model = Conv(input_dim=X_train.shape[1], conv_channels=64)
+    model = train_torch_model(model, train_loader, num_epochs=100, validation_data=validation_data, 
+                            output_model_name=model_name)
+
     torch.save(model.state_dict(), OUTDIR+model_name)
-    pred = model(torch.as_tensor(train_data, dtype=torch.float32))
-    m =  amex_metric(train_labels, pred.detach().numpy())
-    print("performance", m)
-    eval(model)
-
+    
+    del train_data
+    del train_dataset
+    gc.collect()
+    
 # %%

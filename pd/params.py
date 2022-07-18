@@ -6,7 +6,7 @@ import pickle
 BATCH_SIZE = 20000
 
 ## log 
-PerfThreshold = 0.78
+PerfThreshold = 0.8
 logBestIndiv = 20
 
 
@@ -29,6 +29,8 @@ elif sys.platform == 'linux':
 try:
 	with open(OUTDIR+"col_info.pkl", "rb") as f:
 		col_info = pickle.load(f)
+	with open(OUTDIR+"col_info13.pkl", "rb") as f:
+		col_info13 = pickle.load(f)
 except Exception:
 	pass
 
@@ -50,6 +52,7 @@ dataCols = ['customer_ID', 'S_2', 'P_2', 'D_39', 'B_1', 'B_2', 'R_1', 'S_3', 'D_
  	'D_122', 'D_123', 'D_124', 'D_125', 'D_126', 'D_127', 'D_128', 'D_129', 'B_41', 'B_42', 'D_130', 'D_131','D_132',
  	'D_133','R_28', 'D_134', 'D_135', 'D_136', 'D_137', 'D_138', 'D_139', 'D_140', 'D_141', 'D_142', 'D_143', 'D_144',
 	'D_145']
+featureCols = [col for col in dataCols if col not in ["customer_ID", "S_2"]]
 CATCOLS = ['B_30', 'B_38', 'D_114', 'D_116', 'D_117', 'D_120', 'D_126', 'D_63', 'D_64', 'D_66', 'D_68']
 ContCols = [col for col in dataCols if col not in CATCOLS + ["customer_ID", "S_2", "target"]]
 MostNaNCols = ['D_42', 'D_50', 'D_53', 'D_73', 'D_76', 'B_29', 'D_88', 'D_110', 'B_39', 'B_42', 'D_132', 'D_134', 'D_142']
