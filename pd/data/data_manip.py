@@ -1,34 +1,9 @@
 
 import json
 import numpy as np
+from sklearn.preprocessing import LabelEncoder
 import pandas as pd
 from pd.params import *
-
-def get_col_info(col_info_name="col_info"):
-    train_data = pd.read_parquet(DATADIR+"train_data.parquet")
-    col_info = {}
-
-    for c in ContCols:
-        col_info[c] = {}
-        d = train_data[c]
-        q2 = d.quantile(0.02)
-        q98 = d.quantile(0.98)
-        col_min_val = d.min()
-        col_max_val = d.max()
-        hist = np.histogram(d, range=[q2, q98], density=True, bins=100)
-        
-        col_info[c]["q2"] = q2
-        col_info[c]["q98"] = q98
-        col_info[c]["min"] = col_min_val
-        col_info[c]["max"] = col_max_val
-        col_info[c]["hist"] = hist
-        col_info[c]["max_prob_mass"] = hist[0].max()
-        col_info[c]["num_nonzero_bins"] = np.count_nonzero(hist[0])
-        
-    with open(OUTDIR+f"{col_info_name}.pkl", "wb") as f:
-        pickle.dump(col_info, f)
-
-    return col_info
 
 
 def get_c13_data(customer_ids, customer_data, cols, train_labels=None, test_mode=False):

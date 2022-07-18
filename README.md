@@ -29,6 +29,7 @@ The fists step from the data side could be only working with the dataset of the 
 
 
 ## Details
+- Try sampling equal amount of data from the labels
 - Try es on the conv net with initial trained start -> smapling from a relvatively okay model starts with a worse
     - try the cmaes itself (did not perform the best with a big batch size and not init params)
     - paly around with the sigma_init (submitted a bcmaes with 5)
