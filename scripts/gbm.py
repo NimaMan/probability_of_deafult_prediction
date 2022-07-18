@@ -18,6 +18,9 @@ import lightgbm as lgb
 from pd.params import *
 #from pd.metric import amex_metric
 
+import warnings
+warnings.filterwarnings('ignore')
+
 
 def amex_metric(y_true, y_pred):
     labels = np.transpose(np.array([y_true, y_pred]))
@@ -52,7 +55,7 @@ def train_lgbm_single_feature(data, f, feature, params, tempdir=None, n_folds=5,
     for fold, (trn_ind, val_ind) in enumerate(kfold.split(data, data["target"])):
         print(' ')
         print('-'*50)
-        print(f'Training fold {fold} of {feature} feature...')
+        print(f'Training fold {fold} of {f} feature...')
         x_train, x_val = data[feature].iloc[trn_ind], data[feature].iloc[val_ind]
         y_train, y_val = data["target"].iloc[trn_ind], data["target"].iloc[val_ind]
         lgb_train = lgb.Dataset(x_train, y_train, categorical_feature=cat_feature)
@@ -78,28 +81,39 @@ def train_lgbm_single_feature(data, f, feature, params, tempdir=None, n_folds=5,
     score = amex_metric(data["target"], oof_predictions)  # Compute out of folds metric
     print(f'Our out of folds CV score is {score}')
     # Create a dataframe to store out of folds predictions
-    oof_df = pd.DataFrame({'customer_ID': data['customer_ID'], 'target': data["target"], 'prediction': oof_predictions})
-    oof_dir = os.path.join(tempdir, f'oof_lgbm_baseline_{n_folds}fold_seed{seed}_{feature}.csv')
+    if tempdir is not None:
+        oof_dir = f'oof_lgbm_baseline_{n_folds}fold_seed{seed}_{score}_{f}.csv'
+        oof_dir = os.path.join(tempdir, oof_dir)
+        #oof_df = pd.read_csv(oof_dir)
+        #oof_df[f] = oof_predictions
+        oof_df = pd.DataFrame({f'{f}': oof_predictions})
+        score_df = pd.read_csv(os.path.join(tempdir, "scores.csv"))
+        score_df = score_df.append({"feature":f, "score":score}, ignore_index=True)
+        score_df.to_csv(os.path.join(tempdir, "scores.csv"), index=False)
+    else:
+        oof_df = pd.DataFrame({'customer_ID': data['customer_ID'], 'target': data["target"], 'prediction': oof_predictions})
+        oof_dir = f'oof_lgbm_baseline_{n_folds}fold_seed{seed}_{score}_{f}.csv'
     oof_df.to_csv(oof_dir, index=False)
 
     return score
 
 
 @ray.remote
-def worker_fn(data, f, feature, params):
-    return train_lgbm_single_feature(data, f, feature, params)
+def worker_fn(data, f, feature, params, tempdir, n_folds=2, seed=42):
+    return train_lgbm_single_feature(data, f, feature, params, tempdir, n_folds=n_folds, seed=seed)
 
 
-def get_features_scores(data, features, params):
+def get_features_scores(data, features, params, tempdir=None, n_folds=2, seed=42):
     candidate_rewards_tracker = {}
     candidate_rewards = {}
     remaining_ids = []
     for idx, f in enumerate(features.keys()):
         feat = features[f]
         df = data[feat + ["customer_ID", "target"]]
-        indiv_remote_id = worker_fn.remote(df, f, feat, params)
+        indiv_remote_id = worker_fn.remote(df, f, feat, params, tempdir, n_folds=n_folds, seed=seed)
+
         remaining_ids.append(indiv_remote_id)
-        candidate_rewards_tracker[indiv_remote_id] = idx
+        candidate_rewards_tracker[indiv_remote_id] = f
 
     while remaining_ids:
         done_ids, remaining_ids = ray.wait(remaining_ids)
@@ -109,9 +123,9 @@ def get_features_scores(data, features, params):
         indiv_reward = ray.get(result_id)
         candidate_rewards[indiv_id] = indiv_reward
 
-    rewards = {features[i]: candidate_rewards[i] for i in range(len(features))}
+    #rewards = {features[i]: candidate_rewards[i] for i in range(len(features))}
 
-    return rewards
+    return candidate_rewards
 
 
 @click.command()
@@ -133,9 +147,11 @@ def run_experiment(n_workers):
         'min_data_in_leaf': 40
         }
 
+    n_folds = 2
+    seed = 42
     run_info = params
 
-    tempdir = tempfile.mkdtemp(prefix="pd_lgbm_", dir=OUTDIR)
+    tempdir = tempfile.mkdtemp(prefix="pd_lgbm_feat_trans_", dir=OUTDIR)
     with open(os.path.join(tempdir, "run_info.json"), "w") as fh:
         json.dump(run_info, fh, indent=4)
 
@@ -148,18 +164,27 @@ def run_experiment(n_workers):
         encoder = LabelEncoder()
         train[cat_col] = encoder.fit_transform(train[cat_col])
     
-    # Round last float features to 2 decimal place
+    # Round last float features to 2 decimal place ##WHY##
     num_cols = list(train.dtypes[(train.dtypes == 'float32') | (train.dtypes == 'float64')].index)
     num_cols = [col for col in num_cols if 'last' in col]
-    for col in num_cols:
-        train[col + '_round2'] = train[col].round(2)
+    #for col in num_cols:
+    #    train[col + '_round2'] = train[col].round(2)
     
     features = {}
     for col in dataCols:
         if col not in ['customer_ID', "S_2", "target"]:
             features[col] = [c for c in train.columns if col+"_" in c]
-            
-    scores = get_features_scores(train, features, params)
+    
+
+    oof_dir = f'oof_lgbm_baseline_{n_folds}fold_seed{seed}.csv'
+    oof_dir = os.path.join(tempdir, oof_dir)
+    oof_df = pd.DataFrame({'customer_ID': train['customer_ID'], 'target': train["target"]})
+    oof_df.to_csv(oof_dir, index=False)
+
+    score_df = pd.DataFrame(columns=["feature", "score"])
+    score_df.to_csv(os.path.join(tempdir, "scores.csv"), index=False)
+    
+    scores = get_features_scores(train, features, params, tempdir=tempdir, n_folds=n_folds, seed=seed)
     with open(os.path.join(tempdir, "scores.json"), "w") as fh:
         json.dump(scores, fh, indent=4)
 
