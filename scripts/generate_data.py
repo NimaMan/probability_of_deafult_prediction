@@ -20,6 +20,8 @@ if __name__ == "__main__":
 
     #write_train_npy(my_cols)
     #write_test_npy(my_cols)
-    get_col_info(train_data=None, col_info_name="col_info", c13=True)
-    preprocess_data(data_type="train", c13=True)
+    
+    #get_col_info(train_data=None, col_info_name="col_info", c13=True)
+    preprocess_data(data_type="train", c13=False)
+    preprocess_data(data_type="test", c13=False)
     #preprocess_data(data_type="test")

@@ -31,7 +31,7 @@ if __name__ == "__main__":
     #train_loader = DataLoader(train_dataset, batch_size=1)
 
     
-    model = Conv(input_dim=X_train.shape[1], conv_channels=64)
+    model = Conv(input_dim=X_train.shape[-1], conv_channels=64)
     model = train_torch_model(model, train_loader, num_epochs=100, validation_data=validation_data, 
                             output_model_name=model_name)
 

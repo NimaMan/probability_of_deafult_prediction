@@ -36,8 +36,9 @@ def pred13(model):
     result.set_index("customer_ID").to_csv(OUTDIR+"sub.csv")
 
 
-def pred_test_npy(model=None, model_name=""):
-    test_data = np.load(OUTDIR+"test_data_all.npy")
+def pred_test_npy(model=None, model_name="", test_data=None):
+    if test_data is None:
+        test_data = np.load(OUTDIR+"test_raw_all_data.npy")
     with open(OUTDIR+'test_customers_id_dict.json', 'r') as f:
             test_id_dict = json.load(f)
 

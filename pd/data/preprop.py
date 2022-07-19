@@ -83,8 +83,10 @@ def get_raw_features(customer_ids, train_data, train_labels=None, test_mode=Fals
         train_data[c] = train_data[c].fillna(col_info13[c]["mean"])
         if normalize:
             if c in ContCols:
-                train_data[c] = (train_data[c] - col_info13[c]["q1"])/ (col_info13[c]["q99"] - col_info13[c]["q1"])
-        
+                if (col_info13[c]["q99"] - col_info13[c]["q1"]) != 0:
+                    train_data[c] = (train_data[c] - col_info13[c]["q1"])/(col_info13[c]["q99"] - col_info13[c]["q1"])
+                    # some cols end up with NaN vals    
+
     customer_data = train_data.groupby("customer_ID")
     labels_array = np.zeros((len(set(customer_ids)) ,1))
     id_dict = {}
@@ -101,7 +103,39 @@ def get_raw_features(customer_ids, train_data, train_labels=None, test_mode=Fals
     return d, labels_array, id_dict
 
 
-def preprocess_data(data_type="train", c13=False, feat_type="raw_all"):
+def get_raw_features_fill(customer_ids, train_data, train_labels=None, test_mode=False, normalize=True):
+    cols = featureCols
+    # fill nan with mean of each columns
+    fill_feats = [] 
+    for c in cols:
+        train_data[c] = train_data[c].fillna(col_info13[c]["mean"])
+        if normalize:
+            if c in ContCols:
+                if (col_info13[c]["q99"] - col_info13[c]["q1"]) != 0:
+                    train_data[c] = (train_data[c] - col_info13[c]["q1"])/(col_info13[c]["q99"] - col_info13[c]["q1"])
+                    fill_feats.append((col_info13[c]["mean"] - col_info13[c]["q1"])/(col_info13[c]["q99"] - col_info13[c]["q1"]))
+                else:
+                    fill_feats.append(col_info13[c]["mean"]) 
+            else:
+                fill_feats.append(col_info13[c]["mean"])
+                
+    customer_data = train_data.groupby("customer_ID")
+    labels_array = np.zeros((len(set(customer_ids)) ,1))
+    id_dict = {}
+    d = np.ones((len(set(customer_ids)), 13, len(cols)), dtype=np.float32)*np.array(fill_feats).reshape(1, 1, len(cols))
+    for idx, c in enumerate(set(customer_ids)):
+        cd = customer_data.get_group(c)[cols].values
+        num_data_point = cd.shape[0]
+        d[idx, -num_data_point:, :] = cd
+        id_dict[idx] = c
+        if not test_mode:
+            label = train_labels.loc[c]
+            labels_array[idx] = label
+    
+    return d, labels_array, id_dict
+
+
+def preprocess_data(data_type="train", c13=False, feat_type="raw_all",):
     
     if data_type == "train":
         data = pd.read_parquet(DATADIR+"train_data.parquet")
@@ -121,12 +155,21 @@ def preprocess_data(data_type="train", c13=False, feat_type="raw_all"):
     if feat_type == "kaggle97":
         data = get_kaggle_79_feat(data, train_labels)
     elif feat_type == "raw_all":
-        data, labels_array, id_dict = get_raw_features(customers, data, train_labels=train_labels.set_index("customer_ID"))
+        if data_type == "train":
+            data, labels_array, id_dict = get_raw_features_fill(customers, data, train_labels=train_labels.set_index("customer_ID"))
+        else:
+            data, labels_array, id_dict = get_raw_features_fill(customers, data, test_mode=True)
     else:
         raise NotImplementedError
         
     if c13:
-        np.save(OUTDIR+"c13_labels.npy", labels_array)
-        np.save(OUTDIR+"c13_data.npy", data)
+        if data_type == "train":
+            np.save(OUTDIR+"c13_labels.npy", labels_array)
+        np.save(OUTDIR+"c13_data.npy", data)        
     else:
-        data.to_parquet(OUTDIR+f"{data_type}_fe.parquet")
+        try:
+            if data_type == "train":
+                np.save(OUTDIR+f"{data_type}_{feat_type}_labels.npy", labels_array)
+            np.save(OUTDIR+f"{data_type}_{feat_type}_data.npy", data)
+        except Exception:
+            data.to_parquet(OUTDIR+f"{data_type}_{feat_type}.parquet")

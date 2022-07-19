@@ -11,7 +11,6 @@ import random
 import joblib
 from tqdm.auto import tqdm
 from sklearn.model_selection import StratifiedKFold, train_test_split
-from sklearn.preprocessing import LabelEncoder
 
 import torch 
 import torch.nn 
@@ -22,7 +21,6 @@ from pd.data.loader import CustomerData
 from pd.nn.train_utils import train_torch_model
 from pd.metric import amex_metric
 from pd.params import *
-from pd.pred import pred_test_npy as predict
 
 
 def train_torch(data, labels, feature, params, tempdir=None, n_folds=5, seed=42):
@@ -39,8 +37,8 @@ def train_torch(data, labels, feature, params, tempdir=None, n_folds=5, seed=42)
 
         train_dataset = CustomerData(x_train, train_labels=y_train)
         train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE)
-        model = Conv(input_dim=x_train.shape[-1], conv_channels=25)
-        model = train_torch_model(model, train_loader, num_epochs=100, validation_data=validation_data, output_model_name=f)
+        model = Conv(input_dim=x_train.shape[-1], conv_channels=params["conv_channels"])
+        model = train_torch_model(model, train_loader, num_epochs=25, validation_data=validation_data, output_model_name=feature, tempdir=tempdir)
 
         # Save best model
         #joblib.dump(model, tempdir+f'Models/lgbm_fold{fold}_seed{seed}.pkl')
@@ -49,7 +47,7 @@ def train_torch(data, labels, feature, params, tempdir=None, n_folds=5, seed=42)
         # Compute fold metric
         score = amex_metric(y_val, val_pred)
         print(f'Our fold {fold} CV score is {score}')
-        del x_train, x_val, y_train, y_val, lgb_train, lgb_valid
+        del x_train, x_val, y_train, y_val, train_dataset
         gc.collect()
     score = amex_metric(labels, oof_predictions)  # Compute out of folds metric
     print(f'Our out of folds CV score is {score}')
@@ -61,17 +59,17 @@ def train_torch(data, labels, feature, params, tempdir=None, n_folds=5, seed=42)
 
 
 @ray.remote
-def worker_fn(data, labels, feature, params):
-    return train_torch(data, labels, feature, params)
+def worker_fn(data, labels, feature, params, tempdir):
+    return train_torch(data, labels, feature, params, tempdir)
 
 
-def get_features_scores(data, labels, features, params):
+def get_features_scores(data, labels, features, params, tempdir):
     candidate_rewards_tracker = {}
     candidate_rewards = {}
     remaining_ids = []
     for idx, f in enumerate(features):
         d = data[:, :, idx].reshape(data.shape[0], 13, -1)
-        indiv_remote_id = worker_fn.remote(d, labels, f, params)
+        indiv_remote_id = worker_fn.remote(d, labels, f, params, tempdir)
         remaining_ids.append(indiv_remote_id)
         candidate_rewards_tracker[indiv_remote_id] = idx
 
@@ -92,7 +90,7 @@ def get_features_scores(data, labels, features, params):
 @click.option("--n-workers", default=32)
 def run_experiment(n_workers):
 
-    params = {
+    params = {"conv_channels":25
         }
 
     run_info = params
@@ -104,8 +102,9 @@ def run_experiment(n_workers):
     ray.init(num_cpus=n_workers, ignore_reinit_error=True)
     
     train = np.load(OUTDIR+"c13_data.npy")
-    labels = np.load(OUTDIR+"c13_labels.npy")            
-    scores = get_features_scores(train, labels, featureCols, params)
+    labels = np.load(OUTDIR+"c13_labels.npy")
+    
+    scores = get_features_scores(train, labels, featureCols, params, tempdir=tempdir)
 
     with open(os.path.join(tempdir, "scores.json"), "w") as fh:
         json.dump(scores, fh, indent=4)

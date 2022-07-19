@@ -35,7 +35,7 @@ def train_torch_model(model, train_loader, validation_data=None, num_epochs=45, 
             optimizer.step()
             model_metric = amex_metric(clabel.detach().numpy(), pred.detach().numpy())
             val_metrix = 0
-            if model_metric > 0.78:
+            if model_metric > valThreshold:
                 X_test, y_test = validation_data
                 val_features = torch.as_tensor(X_test, dtype=torch.float32)
                 val_pred = model(val_features)
@@ -46,7 +46,7 @@ def train_torch_model(model, train_loader, validation_data=None, num_epochs=45, 
             write_log(log=log_message, log_desc=output_model_name+"_log", out_dir=tempdir)
 
             if val_metrix > PerfThreshold:
-                output = output_model_name + f"_{int(1000*model_metric)}_{epoch}_{idx}"
+                output = output_model_name + f"_{int(1000*val_metrix)}_{epoch}_{idx}"
                 output_file = os.path.join(tempdir, output)
 
                 torch.save(model.state_dict(), output_file)

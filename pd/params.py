@@ -6,7 +6,8 @@ import pickle
 BATCH_SIZE = 20000
 
 ## log 
-PerfThreshold = 0.8
+PerfThreshold = 0.795
+valThreshold = 0.78
 logBestIndiv = 20
 
 

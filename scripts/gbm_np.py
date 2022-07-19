@@ -70,11 +70,11 @@ def train_lgbm(data, labels, feature, params, tempdir=None, n_folds=5, seed=42):
         val_pred = model.predict(x_val) # Predict validation
         oof_predictions[val_ind] = val_pred  # Add to out of folds array
         # Compute fold metric
-        score = amex_metric(y_val, val_pred)
+        score = amex_metric(y_val.reshape(-1, ), val_pred)
         print(f'Our fold {fold} CV score is {score}')
         del x_train, x_val, y_train, y_val, lgb_train, lgb_valid
         gc.collect()
-    score = amex_metric(labels, oof_predictions)  # Compute out of folds metric
+    score = amex_metric(labels.reshape(-1, ), oof_predictions)  # Compute out of folds metric
     print(f'Our out of folds CV score is {score}')
     # Create a dataframe to store out of folds predictions
     oof_dir = os.path.join(tempdir, f'{n_folds}fold_seed{seed}_{feature}.npy')
@@ -84,17 +84,17 @@ def train_lgbm(data, labels, feature, params, tempdir=None, n_folds=5, seed=42):
 
 
 @ray.remote
-def worker_fn(data, labels, feature, params):
-    return train_lgbm(data, labels, feature, params)
+def worker_fn(data, labels, feature, params, tempdir):
+    return train_lgbm(data, labels, feature, params, tempdir)
 
 
-def get_features_scores(data, labels, features, params):
+def get_features_scores(data, labels, features, params, tempdir):
     candidate_rewards_tracker = {}
     candidate_rewards = {}
     remaining_ids = []
     for idx, f in enumerate(features):
         d = data[:, :, idx]
-        indiv_remote_id = worker_fn.remote(d, labels, f, params)
+        indiv_remote_id = worker_fn.remote(d, labels, f, params, tempdir)
         remaining_ids.append(indiv_remote_id)
         candidate_rewards_tracker[indiv_remote_id] = idx
 
@@ -109,14 +109,6 @@ def get_features_scores(data, labels, features, params):
     rewards = {features[i]: candidate_rewards[i] for i in range(len(features))}
 
     return rewards
-
-def run_gbm(params, c13=True):
-
-    train = np.load(OUTDIR+"c13_data.npy")
-    labels = np.load(OUTDIR+"c13_labels.npy")            
-    scores = get_features_scores(train, labels, featureCols, params)
-
-    return scores
 
 @click.command()
 @click.option("--n-workers", default=32)
@@ -145,7 +137,9 @@ def run_experiment(n_workers):
 
     ray.init(num_cpus=n_workers, ignore_reinit_error=True)
     
-    scores = run_gbm(params)
+    train = np.load(OUTDIR+"c13_data.npy")
+    labels = np.load(OUTDIR+"c13_labels.npy")            
+    scores = get_features_scores(train, labels, featureCols, params, tempdir)
 
     with open(os.path.join(tempdir, "scores.json"), "w") as fh:
         json.dump(scores, fh, indent=4)

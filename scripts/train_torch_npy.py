@@ -11,7 +11,7 @@ import torch.nn
 from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
 
-from pd.nn.model import Conv2
+from pd.nn.model import Conv
 from pd.data.loader import CustomerData, DTwithLabelRatio
 from pd.nn.train_utils import train_torch_model
 from pd.metric import amex_metric
@@ -21,9 +21,9 @@ from pd.pred import pred_test_npy as predict
 
 if __name__ == "__main__":
     
-    model_name = "conv_90"
-    train_data = np.load(OUTDIR+"train_data_all.npy").transpose((0, 2, 1))
-    train_labels = np.load(OUTDIR+"train_labels_all.npy")
+    model_name = "conv_raw_all"
+    train_data = np.load(OUTDIR+"train_raw_all_data.npy")
+    train_labels = np.load(OUTDIR+"train_raw_all_labels.npy")
     X_train, X_test, y_train, y_test = train_test_split(train_data, train_labels, test_size=1/9, random_state=0, shuffle=True)
     validation_data = (X_test, y_test)
 
@@ -34,7 +34,7 @@ if __name__ == "__main__":
     #train_loader = DataLoader(train_dataset, batch_size=1)
 
     
-    model = Conv2(input_dim=X_train.shape[1])
+    model = Conv(input_dim=X_train.shape[-1], conv_channels=25)
     model = train_torch_model(model, train_loader, num_epochs=100, validation_data=validation_data, 
                             output_model_name=model_name)
 
