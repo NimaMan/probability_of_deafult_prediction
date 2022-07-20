@@ -41,21 +41,21 @@ class MLP(ESModule):
 
 class Conv(ESModule):
 
-    def __init__(self, input_dim=114, hidden_dim=128, output_dim=1, conv_channels=13):
+    def __init__(self, input_dim=114, hidden_dim=128, output_dim=1, conv_channels=13, in_channels=13, kernel_size=3):
         super(Conv, self).__init__()
         self.hidden_dim = hidden_dim
         self.input_dim = input_dim
-        self.conv_chanells = conv_channels
+        self.conv_chanels = conv_channels
         self.output_dim = output_dim
-        self.conv1 = nn.Conv1d(in_channels=13, out_channels=conv_channels, kernel_size=3, padding=1)
+        self.conv1 = nn.Conv1d(in_channels=in_channels, out_channels=conv_channels, kernel_size=kernel_size, padding=1)
         self.n1 = nn.LayerNorm([conv_channels,input_dim])
-        self.conv2 = nn.Conv1d(in_channels=conv_channels, out_channels=conv_channels, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv1d(in_channels=conv_channels, out_channels=conv_channels, kernel_size=kernel_size, padding=1)
         self.n2 = nn.LayerNorm([conv_channels, input_dim])
-        self.conv3 = nn.Conv1d(in_channels=conv_channels, out_channels=conv_channels, kernel_size=3, padding=1)
+        self.conv3 = nn.Conv1d(in_channels=conv_channels, out_channels=conv_channels, kernel_size=kernel_size, padding=1)
         self.n3 = nn.LayerNorm([conv_channels, input_dim])
-        self.conv4 = nn.Conv1d(in_channels=conv_channels, out_channels=conv_channels, kernel_size=3, padding=1)
+        self.conv4 = nn.Conv1d(in_channels=conv_channels, out_channels=conv_channels, kernel_size=kernel_size, padding=1)
         self.n4 = nn.LayerNorm([conv_channels, input_dim])
-        self.conv5 = nn.Conv1d(in_channels=conv_channels, out_channels=conv_channels, kernel_size=3, padding=1)
+        self.conv5 = nn.Conv1d(in_channels=conv_channels, out_channels=conv_channels, kernel_size=kernel_size, padding=1)
         self.n5 = nn.LayerNorm([conv_channels, input_dim])
 
         self.fc1 = nn.Linear(in_features=conv_channels*input_dim, out_features=hidden_dim)
@@ -84,7 +84,7 @@ class Conv(ESModule):
         h = self.n5(h+r)
          
         #h = torch.mean(h, axis=1,)
-        h = h.view(-1, self.conv_chanells*self.input_dim)
+        h = h.view(-1, self.conv_chanels*self.input_dim)
         h = F.selu(self.fc1(h))
         r = self.nf1(h)
         h = F.selu(self.fc2(r))

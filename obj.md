@@ -18,6 +18,8 @@
 
 ## Roadmap
 
-- train SFA on c13 data 
-- evaluate their errors
+- train SFA 
+    - on c13 data
+
+- evaluate errors
 - later propogate the results into the rest of the dataset

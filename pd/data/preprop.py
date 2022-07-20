@@ -103,7 +103,7 @@ def get_raw_features(customer_ids, train_data, train_labels=None, test_mode=Fals
     return d, labels_array, id_dict
 
 
-def get_raw_features_fill(customer_ids, train_data, train_labels=None, test_mode=False, normalize=True):
+def get_raw_features_fill(customer_ids, train_data, train_labels=None, test_mode=False, normalize=True, time_dim=13):
     cols = featureCols
     # fill nan with mean of each columns
     fill_feats = [] 
@@ -122,7 +122,7 @@ def get_raw_features_fill(customer_ids, train_data, train_labels=None, test_mode
     customer_data = train_data.groupby("customer_ID")
     labels_array = np.zeros((len(set(customer_ids)) ,1))
     id_dict = {}
-    d = np.ones((len(set(customer_ids)), 13, len(cols)), dtype=np.float32)*np.array(fill_feats).reshape(1, 1, len(cols))
+    d = np.ones((len(set(customer_ids)), time_dim, len(cols)), dtype=np.float32)*np.array(fill_feats, dtype=np.float32).reshape(1, 1, len(cols))
     for idx, c in enumerate(set(customer_ids)):
         cd = customer_data.get_group(c)[cols].values
         num_data_point = cd.shape[0]
@@ -135,7 +135,7 @@ def get_raw_features_fill(customer_ids, train_data, train_labels=None, test_mode
     return d, labels_array, id_dict
 
 
-def preprocess_data(data_type="train", c13=False, feat_type="raw_all",):
+def preprocess_data(data_type="train", feat_type="raw_all", time_dim=13):
     
     if data_type == "train":
         data = pd.read_parquet(DATADIR+"train_data.parquet")
@@ -146,30 +146,31 @@ def preprocess_data(data_type="train", c13=False, feat_type="raw_all",):
     
     customer_count =  data.customer_ID.value_counts()
     customers = customer_count.index
-    if c13:
+    output_file_name = data_type
+    if time_dim is not None:
         print("getting data of the 13 customers")
-        customers = customer_count[customer_count==13].index
+        customers = customer_count[customer_count==time_dim].index
         data = data[data.customer_ID.isin(customers)]
-        data_type = f"{data_type}13"
+        output_file_name = f"{data_type}{time_dim}"
     print('Starting feature engineer...')
     if feat_type == "kaggle97":
         data = get_kaggle_79_feat(data, train_labels)
     elif feat_type == "raw_all":
         if data_type == "train":
-            data, labels_array, id_dict = get_raw_features_fill(customers, data, train_labels=train_labels.set_index("customer_ID"))
+            data, labels_array, id_dict = get_raw_features_fill(customers, data, train_labels=train_labels.set_index("customer_ID"), time_dim=time_dim)
         else:
-            data, labels_array, id_dict = get_raw_features_fill(customers, data, test_mode=True)
+            data, labels_array, id_dict = get_raw_features_fill(customers, data, test_mode=True, time_dim=time_dim)
     else:
         raise NotImplementedError
         
-    if c13:
+    if time_dim is not None:
         if data_type == "train":
-            np.save(OUTDIR+"c13_labels.npy", labels_array)
-        np.save(OUTDIR+"c13_data.npy", data)        
+            np.save(OUTDIR+f"{output_file_name}_{feat_type}_labels.npy", labels_array)
+        np.save(OUTDIR+f"{output_file_name}_{feat_type}_data.npy", data)        
     else:
         try:
             if data_type == "train":
-                np.save(OUTDIR+f"{data_type}_{feat_type}_labels.npy", labels_array)
-            np.save(OUTDIR+f"{data_type}_{feat_type}_data.npy", data)
+                np.save(OUTDIR+f"{output_file_name}_{feat_type}_labels.npy", labels_array)
+            np.save(OUTDIR+f"{output_file_name}_{feat_type}_data.npy", data)
         except Exception:
-            data.to_parquet(OUTDIR+f"{data_type}_{feat_type}.parquet")
+            data.to_parquet(OUTDIR+f"{output_file_name}_{feat_type}.parquet")

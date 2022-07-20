@@ -22,6 +22,6 @@ if __name__ == "__main__":
     #write_test_npy(my_cols)
     
     #get_col_info(train_data=None, col_info_name="col_info", c13=True)
-    preprocess_data(data_type="train", c13=False)
-    preprocess_data(data_type="test", c13=False)
+    preprocess_data(data_type="train", time_dim=12)
+    #preprocess_data(data_type="test", time_dim=10)
     #preprocess_data(data_type="test")

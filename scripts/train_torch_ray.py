@@ -23,7 +23,7 @@ from pd.metric import amex_metric
 from pd.params import *
 
 
-def train_torch(data, labels, feature, params, tempdir=None, n_folds=5, seed=42):
+def train_torch(data, labels, feature, config, tempdir=None, n_folds=5, seed=42):
     
     oof_predictions = np.zeros(len(data))
     kfold = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=seed)
@@ -37,13 +37,13 @@ def train_torch(data, labels, feature, params, tempdir=None, n_folds=5, seed=42)
 
         train_dataset = CustomerData(x_train, train_labels=y_train)
         train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE)
-        model = Conv(input_dim=x_train.shape[-1], conv_channels=params["conv_channels"])
-        model = train_torch_model(model, train_loader, num_epochs=25, validation_data=validation_data, output_model_name=feature, tempdir=tempdir)
+        model = Conv(input_dim=x_train.shape[-1], conv_channels=config["conv_channels"])
+        model = train_torch_model(model, train_loader, config=config, validation_data=validation_data, output_model_name=feature, tempdir=tempdir)
 
         # Save best model
         #joblib.dump(model, tempdir+f'Models/lgbm_fold{fold}_seed{seed}.pkl')
-        val_pred = model(x_val) # Predict validation
-        oof_predictions[val_ind] = val_pred  # Add to out of folds array
+        val_pred = model(torch.as_tensor(x_val, dtype=torch.float32)).detach().numpy() # Predict validation
+        oof_predictions[val_ind] = val_pred.reshape(-1, )  # Add to out of folds array
         # Compute fold metric
         score = amex_metric(y_val, val_pred)
         print(f'Our fold {fold} CV score is {score}')
@@ -90,10 +90,9 @@ def get_features_scores(data, labels, features, params, tempdir):
 @click.option("--n-workers", default=32)
 def run_experiment(n_workers):
 
-    params = {"conv_channels":25
-        }
+    config = {"weight_decay": 0.01, "num_epochs": 50, "conv_channels":25}
 
-    run_info = params
+    run_info = config
 
     tempdir = tempfile.mkdtemp(prefix="pd13_conv_", dir=OUTDIR)
     with open(os.path.join(tempdir, "run_info.json"), "w") as fh:
@@ -104,7 +103,7 @@ def run_experiment(n_workers):
     train = np.load(OUTDIR+"c13_data.npy")
     labels = np.load(OUTDIR+"c13_labels.npy")
     
-    scores = get_features_scores(train, labels, featureCols, params, tempdir=tempdir)
+    scores = get_features_scores(train, labels, featureCols, config, tempdir=tempdir)
 
     with open(os.path.join(tempdir, "scores.json"), "w") as fh:
         json.dump(scores, fh, indent=4)
