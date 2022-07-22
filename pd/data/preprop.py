@@ -1,5 +1,6 @@
 
 import gc
+import json
 import warnings
 warnings.filterwarnings('ignore')
 import scipy as sp
@@ -135,7 +136,7 @@ def get_raw_features_fill(customer_ids, train_data, train_labels=None, test_mode
     return d, labels_array, id_dict
 
 
-def preprocess_data(data_type="train", feat_type="raw_all", time_dim=13):
+def preprocess_data(data_type="train", feat_type="raw_all", time_dim=13, all_test_data=True):
     
     if data_type == "train":
         data = pd.read_parquet(DATADIR+"train_data.parquet")
@@ -159,7 +160,10 @@ def preprocess_data(data_type="train", feat_type="raw_all", time_dim=13):
         if data_type == "train":
             data, labels_array, id_dict = get_raw_features_fill(customers, data, train_labels=train_labels.set_index("customer_ID"), time_dim=time_dim)
         else:
-            data, labels_array, id_dict = get_raw_features_fill(customers, data, test_mode=True, time_dim=time_dim)
+            test_time_dim = time_dim
+            if all_test_data:
+                test_time_dim = 13
+            data, labels_array, test_id_dict = get_raw_features_fill(customers, data, test_mode=True, time_dim=test_time_dim)
     else:
         raise NotImplementedError
         
@@ -171,6 +175,10 @@ def preprocess_data(data_type="train", feat_type="raw_all", time_dim=13):
         try:
             if data_type == "train":
                 np.save(OUTDIR+f"{output_file_name}_{feat_type}_labels.npy", labels_array)
+            else:
+                with open(OUTDIR+f"{output_file_name}_{feat_type}_id.json", 'w') as fp:
+                    json.dump(test_id_dict, fp)
+
             np.save(OUTDIR+f"{output_file_name}_{feat_type}_data.npy", data)
         except Exception:
             data.to_parquet(OUTDIR+f"{output_file_name}_{feat_type}.parquet")

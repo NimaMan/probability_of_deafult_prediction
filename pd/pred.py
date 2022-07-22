@@ -39,16 +39,17 @@ def pred13(model):
 def pred_test_npy(model=None, model_name="", test_data=None):
     if test_data is None:
         test_data = np.load(OUTDIR+"test_raw_all_data.npy")
-    with open(OUTDIR+'test_customers_id_dict.json', 'r') as f:
+    with open(OUTDIR+'test_raw_all_id.json', 'r') as f:
             test_id_dict = json.load(f)
 
     if model is None:
         model = Conv()
         model_param = torch.load(OUTDIR+model_name)
         model.load_state_dict(model_param)
-        
+    
+    test_data = torch.as_tensor(test_data, dtype=torch.float32)
     model.eval()
-    pred =  model(torch.as_tensor(test_data, dtype=torch.float32))
+    pred =  model(test_data)
     result = pd.DataFrame({"customer_ID":test_id_dict.values(), 
                         "prediction":pred.detach().numpy().reshape(-1)
                         }

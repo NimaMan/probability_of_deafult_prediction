@@ -19,8 +19,8 @@ from pd.pred import pred_test_npy as predict
 
 
 if __name__ == "__main__":
-    time_dim = 12
-    config = {"weight_decay": 0.01, "num_epochs": 50, "conv_channels":32}
+    time_dim = 13
+    config = {"weight_decay": 0.01, "num_epochs": 50, "conv_channels": 128}
     model_name = f"conv{config['conv_channels']}_c{time_dim}_all"
 
     if time_dim < 13:
@@ -50,7 +50,7 @@ if __name__ == "__main__":
     
     del train_data, train_dataset
     gc.collect()
-    
+
     predict(model=model, model_name=model_name)
 
     
