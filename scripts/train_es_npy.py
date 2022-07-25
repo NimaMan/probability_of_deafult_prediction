@@ -4,6 +4,9 @@ import functools
 import numpy as np
 import pandas as pd 
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from bes.nn.es_module import ESModule
 import ray
 import tempfile
 import json
@@ -29,12 +32,12 @@ class CustomerData(Dataset):
         return len(self.train_labels)
 
     def __getitem__(self, index):        
-        feat =  torch.as_tensor(self.data[index], dtype=torch.float32)
+        feat =  torch.from_numpy(self.data[index])
 
         if self.test_mode:
             return feat, index
         else:
-            customer_label = torch.as_tensor(self.train_labels[index], dtype=torch.float32)
+            customer_label = torch.from_numpy(self.train_labels[index])
             return feat, customer_label
 
 
@@ -44,9 +47,10 @@ def worker_with_batch(model, weights, feat, labels):
     model.set_model_params(weights)
     with torch.no_grad():
         pred = model(feat)
-        reward = amex_metric(labels, pred.detach().numpy())
+        reward, gini, recall = amex_metric(labels, pred.detach().numpy(), return_components=True)
 
-        return reward
+        #return reward
+        return recall
 
 
 def get_candidate_rewards_batch_data(candidates, model, feat, labels):
@@ -83,8 +87,35 @@ def run_with_ray_send_data_to_worker(model_cls, population_size, num_cma_iterati
     train_method = "bcma"
     model = model_cls()
     init_params = None
+    class MLP(ESModule):
+        def __init__(self, input_dim, hidden_dim=64,):
+            super(MLP, self).__init__()
+            self.fc1 = nn.Linear(in_features=input_dim, out_features=hidden_dim)
+            self.nf1 = nn.LayerNorm([hidden_dim])
+            self.fc2 = nn.Linear(in_features=hidden_dim, out_features=hidden_dim)
+            self.nf2 = nn.LayerNorm([hidden_dim])
+            
+            self.fc3 = nn.Linear(in_features=hidden_dim, out_features=hidden_dim)
+            self.nf3 = nn.LayerNorm([hidden_dim])
+                    
+            self.fcout = nn.Linear(in_features=hidden_dim, out_features=1)
+        
+        def forward(self, h, return_featues=False):
+            h = F.selu(self.fc1(h))
+            h = self.nf1(h)
+            r = F.selu(self.fc2(h))
+            r = self.nf2(r)
+            h = F.selu(self.fc3(h+r))
+            h = self.nf3(h)
+            h = h+r
+            if return_featues:
+                return torch.sigmoid(self.fcout(h)), h
+            
+            return torch.sigmoid(self.fcout(h))
+
+    model = MLP(128)
     if init_model_name is not None:
-        model = get_intial_model_params(model_cls, model_name=init_model_name)
+        conv_model = get_intial_model_params(model_cls, model_name=init_model_name)
         init_params = model.get_model_flat_params()
     if train_method == "cma":
         es = CMAES(model.num_params, popsize=population_size, sigma_init=5)
@@ -92,12 +123,12 @@ def run_with_ray_send_data_to_worker(model_cls, population_size, num_cma_iterati
         es = BES(model, popsize=population_size, init_params=init_params, max_block_width=1000, sigma_init=5)
 
     training_history = []
-    train_data = np.load(OUTDIR+"train_data_all.npy")
-    train_labels = np.load(OUTDIR+"train_labels_all.npy")
+    train_data = np.load(OUTDIR+"train_raw_all_data.npy")
+    train_labels = np.load(OUTDIR+"train_raw_all_labels.npy")
     X_train, X_test, y_train, y_test = train_test_split(train_data, train_labels, test_size=1/9, random_state=0, shuffle=True)
 
     train_dataset = CustomerData(X_train, train_labels=y_train)
-    train_loader = DataLoader(train_dataset, batch_size=500)
+    train_loader = DataLoader(train_dataset, batch_size=15000)
 
     validation_data = (X_test, y_test)
     
@@ -106,9 +137,9 @@ def run_with_ray_send_data_to_worker(model_cls, population_size, num_cma_iterati
 
     for cma_iteration in range(1, num_cma_iterations+1):
         for feat, labels in train_loader:
-        
+            preds, h = conv_model(feat, return_featues=True)
             candidates = es.ask()
-            rewards = get_candidate_rewards_batch_data(candidates, model, feat, labels)
+            rewards = get_candidate_rewards_batch_data(candidates, model, h, labels)
             training_history.append(np.array(rewards))
             h = f"episode: {int(cma_iteration)}, best reward {np.max(rewards)} median {np.median(rewards)} mean {np.mean(rewards)}," \
                 f" std {np.std(rewards) },\n"
@@ -121,7 +152,8 @@ def run_with_ray_send_data_to_worker(model_cls, population_size, num_cma_iterati
                 best_reward = rewards[best_idx]
                 if best_reward > PerfThreshold:
                     model.set_model_params(best_weights)
-                    val_features = torch.as_tensor(X_test, dtype=torch.float32)
+                    val_features = torch.from_numpy(X_test)
+                    preds, val_features = conv_model(val_features, return_featues=True)
                     val_pred = model(val_features)
                     val_metrix = amex_metric(y_test, val_pred.detach().numpy())
                     if val_metrix > PerfThreshold:
@@ -132,10 +164,10 @@ def run_with_ray_send_data_to_worker(model_cls, population_size, num_cma_iterati
 
 
 @click.command()
-@click.option("--population-size", default=5, type=int)
+@click.option("--population-size", default=64, type=int)
 @click.option("--num-cma-iterations", default=400, type=int)
-@click.option("--n-workers", default=5)
-@click.option("--init_params", default=None)
+@click.option("--n-workers", default=32)
+@click.option("--init_params", default="conv13_32_all")
 def run_experiment(population_size, num_cma_iterations, n_workers, init_params):
 
     run_info = dict(
@@ -145,7 +177,7 @@ def run_experiment(population_size, num_cma_iterations, n_workers, init_params):
         init_model_name=init_params
     )
 
-    tempdir = tempfile.mkdtemp(prefix="pd_", dir=OUTDIR)
+    tempdir = tempfile.mkdtemp(prefix="pd_recall", dir=OUTDIR)
     with open(os.path.join(tempdir, "run_info.json"), "w") as fh:
         json.dump(run_info, fh, indent=4)
 

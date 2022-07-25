@@ -137,7 +137,9 @@ def get_raw_features_fill(customer_ids, train_data, train_labels=None, test_mode
 
 
 def preprocess_data(data_type="train", feat_type="raw_all", time_dim=13, all_data=True, fillna="mean", borders=("q1", "q99")):
+    """
     
+    """
     if data_type == "train":
         data = pd.read_parquet(DATADIR+"train_data.parquet")
         train_labels = pd.read_csv(DATADIR+"train_labels.csv")
@@ -148,8 +150,8 @@ def preprocess_data(data_type="train", feat_type="raw_all", time_dim=13, all_dat
     customer_count =  data.customer_ID.value_counts()
     customers = customer_count.index
     output_file_name = data_type
-    if time_dim is not None:
-        print("getting data of the 13 customers")
+    if not all_data:
+        print(f"getting data of the {time_dim} customers")
         customers = customer_count[customer_count==time_dim].index
         data = data[data.customer_ID.isin(customers)]
         output_file_name = f"{data_type}{time_dim}"
@@ -170,17 +172,16 @@ def preprocess_data(data_type="train", feat_type="raw_all", time_dim=13, all_dat
     else:
         raise NotImplementedError
         
-    if time_dim is not None:
+    #if time_dim is not None:
+    #    if data_type == "train":
+    #        np.save(OUTDIR+f"{output_file_name}_{feat_type}_{fillna}_{borders[0]}_{borders[1]}_labels.npy", labels_array)
+    #    np.save(OUTDIR+f"{output_file_name}_{feat_type}_{fillna}_{borders[0]}_{borders[1]}_data.npy", data)        
+    #else:
+    try:
         if data_type == "train":
             np.save(OUTDIR+f"{output_file_name}_{feat_type}_{fillna}_{borders[0]}_{borders[1]}_labels.npy", labels_array)
-        np.save(OUTDIR+f"{output_file_name}_{feat_type}_{fillna}_{borders[0]}_{borders[1]}_data.npy", data)        
-    else:
-        try:
-            if data_type == "train":
-                np.save(OUTDIR+f"{output_file_name}_{feat_type}_{fillna}_{borders[0]}_{borders[1]}_labels.npy", labels_array)
-            with open(OUTDIR+f"{output_file_name}_{feat_type}_{fillna}_{borders[0]}_{borders[1]}_id.json", 'w') as fp:
-                json.dump(id_dict, fp)
-
-            np.save(OUTDIR+f"{output_file_name}_{feat_type}_{fillna}_{borders[0]}_{borders[1]}_data.npy", data)
-        except Exception:
-            data.to_parquet(OUTDIR+f"{output_file_name}_{feat_type}.parquet")
+        with open(OUTDIR+f"{output_file_name}_{feat_type}_{fillna}_{borders[0]}_{borders[1]}_id.json", 'w') as fp:
+            json.dump(id_dict, fp)
+        np.save(OUTDIR+f"{output_file_name}_{feat_type}_{fillna}_{borders[0]}_{borders[1]}_data.npy", data)
+    except Exception:
+        data.to_parquet(OUTDIR+f"{output_file_name}_{feat_type}.parquet")
