@@ -12,9 +12,9 @@ import random
 import joblib
 from tqdm.auto import tqdm
 from sklearn.model_selection import StratifiedKFold, train_test_split
-from sklearn.preprocessing import LabelEncoder
 import lightgbm as lgb
 
+import pd.metric as metric
 from pd.params import *
 #from pd.metric import amex_metric
 
@@ -70,17 +70,17 @@ def train_lgbm(data, labels, feature, params, tempdir=None, n_folds=5, seed=42):
         val_pred = model.predict(x_val) # Predict validation
         oof_predictions[val_ind] = val_pred  # Add to out of folds array
         # Compute fold metric
-        score = amex_metric(y_val.reshape(-1, ), val_pred)
+        score, gini, recall = metric.amex_metric(y_val.reshape(-1, ), val_pred, return_components=True)
         print(f'Our fold {fold} CV score is {score}')
         del x_train, x_val, y_train, y_val, lgb_train, lgb_valid
         gc.collect()
-    score = amex_metric(labels.reshape(-1, ), oof_predictions)  # Compute out of folds metric
+    score = amex_metric(labels.reshape(-1, ), oof_predictions, return_components=True)  # Compute out of folds metric
     print(f'Our out of folds CV score is {score}')
     # Create a dataframe to store out of folds predictions
     oof_dir = os.path.join(tempdir, f'{n_folds}fold_seed{seed}_{feature}.npy')
     np.save(oof_dir, oof_predictions)
     
-    return score
+    return (score, gini, recall)
 
 
 @ray.remote
@@ -125,20 +125,20 @@ def run_experiment(n_workers):
         'bagging_freq': 10,
         'bagging_fraction': 0.50,
         'n_jobs': -1,
-        'lambda_l2': 2,
+        'lambda_l2': 4,
         'min_data_in_leaf': 40
         }
 
     run_info = params
 
-    tempdir = tempfile.mkdtemp(prefix="pd13_lgbm_", dir=OUTDIR)
+    tempdir = tempfile.mkdtemp(prefix="pd_all_lgbm_", dir=OUTDIR)
     with open(os.path.join(tempdir, "run_info.json"), "w") as fh:
         json.dump(run_info, fh, indent=4)
 
     ray.init(num_cpus=n_workers, ignore_reinit_error=True)
     
-    train = np.load(OUTDIR+"c13_data.npy")
-    labels = np.load(OUTDIR+"c13_labels.npy")            
+    train = np.load(OUTDIR+"train_raw_all_data.npy")
+    labels = np.load(OUTDIR+"train_raw_all_labels.npy")            
     scores = get_features_scores(train, labels, featureCols, params, tempdir)
 
     with open(os.path.join(tempdir, "scores.json"), "w") as fh:

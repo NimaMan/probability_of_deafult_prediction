@@ -49,13 +49,13 @@ def train_torch(data, labels, feature, config, tempdir=None, n_folds=5, seed=42)
         print(f'Our fold {fold} CV score is {score}')
         del x_train, x_val, y_train, y_val, train_dataset
         gc.collect()
-    score = amex_metric(labels, oof_predictions)  # Compute out of folds metric
+    score, gini, recall = amex_metric(labels, oof_predictions, return_components=True)  # Compute out of folds metric
     print(f'Our out of folds CV score is {score}')
     # Create a dataframe to store out of folds predictions
     oof_dir = os.path.join(tempdir, f'{n_folds}fold_seed{seed}_{feature}.npy')
     np.save(oof_dir, oof_predictions)
     
-    return score
+    return (score, gini, recall)
 
 
 @ray.remote
@@ -90,19 +90,18 @@ def get_features_scores(data, labels, features, params, tempdir):
 @click.option("--n-workers", default=32)
 def run_experiment(n_workers):
 
-    config = {"weight_decay": 0.01, "num_epochs": 50, "conv_channels":25}
-
+    config = {"weight_decay": 0.01, "num_epochs": 50, "conv_channels": 32}
     run_info = config
 
-    tempdir = tempfile.mkdtemp(prefix="pd13_conv_", dir=OUTDIR)
+    tempdir = tempfile.mkdtemp(prefix="pd_all_conv_", dir=OUTDIR)
     with open(os.path.join(tempdir, "run_info.json"), "w") as fh:
         json.dump(run_info, fh, indent=4)
 
     ray.init(num_cpus=n_workers, ignore_reinit_error=True)
     
-    train = np.load(OUTDIR+"c13_data.npy")
-    labels = np.load(OUTDIR+"c13_labels.npy")
-    
+    train = np.load(OUTDIR+"train_raw_all_data.npy")
+    labels = np.load(OUTDIR+"train_raw_all_labels.npy")            
+    print("Starting training...")
     scores = get_features_scores(train, labels, featureCols, config, tempdir=tempdir)
 
     with open(os.path.join(tempdir, "scores.json"), "w") as fh:

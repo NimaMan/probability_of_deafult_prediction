@@ -104,21 +104,21 @@ def get_raw_features(customer_ids, train_data, train_labels=None, test_mode=Fals
     return d, labels_array, id_dict
 
 
-def get_raw_features_fill(customer_ids, train_data, train_labels=None, test_mode=False, normalize=True, time_dim=13):
+def get_raw_features_fill(customer_ids, train_data, train_labels=None, test_mode=False, normalize=True, time_dim=13, fillna="mean", borders=("q1", "q99")):
     cols = featureCols
     # fill nan with mean of each columns
     fill_feats = [] 
     for c in cols:
-        train_data[c] = train_data[c].fillna(col_info13[c]["mean"])
+        train_data[c] = train_data[c].fillna(col_info13[c][fillna])
         if normalize:
             if c in ContCols:
-                if (col_info13[c]["q99"] - col_info13[c]["q1"]) != 0:
-                    train_data[c] = (train_data[c] - col_info13[c]["q1"])/(col_info13[c]["q99"] - col_info13[c]["q1"])
-                    fill_feats.append((col_info13[c]["mean"] - col_info13[c]["q1"])/(col_info13[c]["q99"] - col_info13[c]["q1"]))
+                if (col_info13[c][borders[1]] - col_info13[c][borders[0]]) != 0:
+                    train_data[c] = (train_data[c] - col_info13[c][borders[0]])/(col_info13[c][borders[1]] - col_info13[c][borders[0]])
+                    fill_feats.append((col_info13[c][fillna] - col_info13[c][borders[0]])/(col_info13[c][borders[1]] - col_info13[c][borders[0]]))
                 else:
-                    fill_feats.append(col_info13[c]["mean"]) 
+                    fill_feats.append(col_info13[c][fillna]) 
             else:
-                fill_feats.append(col_info13[c]["mean"])
+                fill_feats.append(col_info13[c][fillna])
                 
     customer_data = train_data.groupby("customer_ID")
     labels_array = np.zeros((len(set(customer_ids)) ,1))
@@ -136,7 +136,7 @@ def get_raw_features_fill(customer_ids, train_data, train_labels=None, test_mode
     return d, labels_array, id_dict
 
 
-def preprocess_data(data_type="train", feat_type="raw_all", time_dim=13, all_test_data=True):
+def preprocess_data(data_type="train", feat_type="raw_all", time_dim=13, all_data=True, fillna="mean", borders=("q1", "q99")):
     
     if data_type == "train":
         data = pd.read_parquet(DATADIR+"train_data.parquet")
@@ -157,28 +157,30 @@ def preprocess_data(data_type="train", feat_type="raw_all", time_dim=13, all_tes
     if feat_type == "kaggle97":
         data = get_kaggle_79_feat(data, train_labels)
     elif feat_type == "raw_all":
+        data_time_dim = time_dim
+        if all_data:
+            data_time_dim = 13
         if data_type == "train":
-            data, labels_array, id_dict = get_raw_features_fill(customers, data, train_labels=train_labels.set_index("customer_ID"), time_dim=time_dim)
+            data, labels_array, id_dict = get_raw_features_fill(customers, data, 
+                                            train_labels=train_labels.set_index("customer_ID"), time_dim=data_time_dim, 
+                                            fillna=fillna, borders=borders)
         else:
-            test_time_dim = time_dim
-            if all_test_data:
-                test_time_dim = 13
-            data, labels_array, test_id_dict = get_raw_features_fill(customers, data, test_mode=True, time_dim=test_time_dim)
+            data, labels_array, id_dict = get_raw_features_fill(customers, data, test_mode=True, time_dim=data_time_dim, 
+                                                                fillna=fillna, borders=borders)
     else:
         raise NotImplementedError
         
     if time_dim is not None:
         if data_type == "train":
-            np.save(OUTDIR+f"{output_file_name}_{feat_type}_labels.npy", labels_array)
-        np.save(OUTDIR+f"{output_file_name}_{feat_type}_data.npy", data)        
+            np.save(OUTDIR+f"{output_file_name}_{feat_type}_{fillna}_{borders[0]}_{borders[1]}_labels.npy", labels_array)
+        np.save(OUTDIR+f"{output_file_name}_{feat_type}_{fillna}_{borders[0]}_{borders[1]}_data.npy", data)        
     else:
         try:
             if data_type == "train":
-                np.save(OUTDIR+f"{output_file_name}_{feat_type}_labels.npy", labels_array)
-            else:
-                with open(OUTDIR+f"{output_file_name}_{feat_type}_id.json", 'w') as fp:
-                    json.dump(test_id_dict, fp)
+                np.save(OUTDIR+f"{output_file_name}_{feat_type}_{fillna}_{borders[0]}_{borders[1]}_labels.npy", labels_array)
+            with open(OUTDIR+f"{output_file_name}_{feat_type}_{fillna}_{borders[0]}_{borders[1]}_id.json", 'w') as fp:
+                json.dump(id_dict, fp)
 
-            np.save(OUTDIR+f"{output_file_name}_{feat_type}_data.npy", data)
+            np.save(OUTDIR+f"{output_file_name}_{feat_type}_{fillna}_{borders[0]}_{borders[1]}_data.npy", data)
         except Exception:
             data.to_parquet(OUTDIR+f"{output_file_name}_{feat_type}.parquet")

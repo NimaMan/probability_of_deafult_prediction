@@ -33,7 +33,7 @@ def amex_metric(y_true, y_pred, return_components=False) -> float:
     g = normalized_weighted_gini(df)
     d = top_four_percent_captured(df)
 
-    if return_components: return g, d, 0.5 * (g + d)
+    if return_components: return 0.5 * (g + d), g, d
     return 0.5 * (g + d)
 
 

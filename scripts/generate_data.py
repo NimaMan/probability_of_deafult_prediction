@@ -23,5 +23,5 @@ if __name__ == "__main__":
     
     #get_col_info(train_data=None, col_info_name="col_info", c13=True)
     #preprocess_data(data_type="train", time_dim=12)
-    preprocess_data(data_type="test", time_dim=None)
+    preprocess_data(data_type="train", time_dim=None, fillna="mean", borders=("q1", "q99"))
     #preprocess_data(data_type="test")
