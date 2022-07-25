@@ -74,7 +74,7 @@ def train_lgbm(data, labels, feature, params, tempdir=None, n_folds=5, seed=42):
         print(f'Our fold {fold} CV score is {score}')
         del x_train, x_val, y_train, y_val, lgb_train, lgb_valid
         gc.collect()
-    score = amex_metric(labels.reshape(-1, ), oof_predictions, return_components=True)  # Compute out of folds metric
+    score, gini, recall = metric.amex_metric(labels.reshape(-1, ), oof_predictions, return_components=True)  # Compute out of folds metric
     print(f'Our out of folds CV score is {score}')
     # Create a dataframe to store out of folds predictions
     oof_dir = os.path.join(tempdir, f'{n_folds}fold_seed{seed}_{feature}.npy')
