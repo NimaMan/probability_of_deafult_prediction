@@ -18,7 +18,7 @@ from pd.params import *
 #from pd.data.loader import load_npy_data as load_data
 from pd.metric import amex_metric
 from pd.pred import pred_test_npy
-
+from pd.nn.recall_models import MLP, MLPAtt
 from torch.utils.data import Dataset, DataLoader
 
 
@@ -87,33 +87,9 @@ def run_with_ray_send_data_to_worker(model_cls, population_size, num_cma_iterati
     train_method = "bcma"
     model = model_cls()
     init_params = None
-    class MLP(ESModule):
-        def __init__(self, input_dim, hidden_dim=64,):
-            super(MLP, self).__init__()
-            self.fc1 = nn.Linear(in_features=input_dim, out_features=hidden_dim)
-            self.nf1 = nn.LayerNorm([hidden_dim])
-            self.fc2 = nn.Linear(in_features=hidden_dim, out_features=hidden_dim)
-            self.nf2 = nn.LayerNorm([hidden_dim])
-            
-            self.fc3 = nn.Linear(in_features=hidden_dim, out_features=hidden_dim)
-            self.nf3 = nn.LayerNorm([hidden_dim])
-                    
-            self.fcout = nn.Linear(in_features=hidden_dim, out_features=1)
-        
-        def forward(self, h, return_featues=False):
-            h = F.selu(self.fc1(h))
-            h = self.nf1(h)
-            r = F.selu(self.fc2(h))
-            r = self.nf2(r)
-            h = F.selu(self.fc3(h+r))
-            h = self.nf3(h)
-            h = h+r
-            if return_featues:
-                return torch.sigmoid(self.fcout(h)), h
-            
-            return torch.sigmoid(self.fcout(h))
 
-    model = MLP(128)
+
+    model = MLPAtt(128)
     if init_model_name is not None:
         conv_model = get_intial_model_params(model_cls, model_name=init_model_name)
         init_params = model.get_model_flat_params()
@@ -177,7 +153,7 @@ def run_experiment(population_size, num_cma_iterations, n_workers, init_params):
         init_model_name=init_params
     )
 
-    tempdir = tempfile.mkdtemp(prefix="pd_recall", dir=OUTDIR)
+    tempdir = tempfile.mkdtemp(prefix="pd_recall_att_", dir=OUTDIR)
     with open(os.path.join(tempdir, "run_info.json"), "w") as fh:
         json.dump(run_info, fh, indent=4)
 

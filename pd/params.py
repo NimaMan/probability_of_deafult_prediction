@@ -35,6 +35,10 @@ try:
 except Exception:
 	pass
 
+
+TRAINDATA = DATADIR + "train_data.parquet"
+TESTDATA = DATADIR + "test_data.parquet"
+
 # data
 dataCols = ['customer_ID', 'S_2', 'P_2', 'D_39', 'B_1', 'B_2', 'R_1', 'S_3', 'D_41','B_3',
  	'D_42', 'D_43','D_44', 'B_4', 'D_45', 'B_5', 'R_2', 'D_46', 'D_47', 'D_48', 'D_49',
