@@ -16,7 +16,7 @@ def get_col_info(train_data=None, col_info_name="col_info", c13=False):
     cols = featureCols
 
     if train_data is None:
-        train_data = pd.read_parquet(DATADIR+"train_data.parquet")
+        train_data = pd.read_parquet(TRAINDATA)
     if c13:
         train_customers = train_data.customer_ID
         train_count =  train_customers.value_counts()
@@ -34,6 +34,9 @@ def get_col_info(train_data=None, col_info_name="col_info", c13=False):
         d = train_data[c]
         q2 = d.quantile(0.02)
         q98 = d.quantile(0.98)
+        q5 = d.quantile(0.05)
+        q95 = d.quantile(0.95)
+        
         col_min_val = d.min()
         col_max_val = d.max()
         hist = np.histogram(d, range=[q2, q98], density=True, bins=100)
@@ -110,14 +113,14 @@ def get_raw_features_fill(customer_ids, train_data, train_labels=None, test_mode
     fill_feats = [] 
     for c in cols:
         train_data[c] = train_data[c].fillna(col_info13[c][fillna])
-        if normalize:
-            if c in ContCols:
+        if c in ContCols:
+            if normalize:
                 if (col_info13[c][borders[1]] - col_info13[c][borders[0]]) != 0:
                     train_data[c] = (train_data[c] - col_info13[c][borders[0]])/(col_info13[c][borders[1]] - col_info13[c][borders[0]])
                     fill_feats.append((col_info13[c][fillna] - col_info13[c][borders[0]])/(col_info13[c][borders[1]] - col_info13[c][borders[0]]))
                 else:
                     fill_feats.append(col_info13[c][fillna]) 
-            else:
+        else:
                 fill_feats.append(col_info13[c][fillna])
                 
     customer_data = train_data.groupby("customer_ID")
@@ -136,7 +139,7 @@ def get_raw_features_fill(customer_ids, train_data, train_labels=None, test_mode
     return d, labels_array, id_dict
 
 
-def preprocess_data(data_type="train", feat_type="raw_all", time_dim=13, all_data=True, fillna="mean", borders=("q1", "q99")):
+def preprocess_data(data_type="train", feat_type="raw_all", time_dim=13, all_data=True, fillna="mean", borders=("q1", "q99"), normalize=True,):
     """
     
     """
@@ -165,10 +168,10 @@ def preprocess_data(data_type="train", feat_type="raw_all", time_dim=13, all_dat
         if data_type == "train":
             data, labels_array, id_dict = get_raw_features_fill(customers, data, 
                                             train_labels=train_labels.set_index("customer_ID"), time_dim=data_time_dim, 
-                                            fillna=fillna, borders=borders)
+                                            fillna=fillna, borders=borders, normalize=normalize)
         else:
             data, labels_array, id_dict = get_raw_features_fill(customers, data, test_mode=True, time_dim=data_time_dim, 
-                                                                fillna=fillna, borders=borders)
+                                                                fillna=fillna, borders=borders, normalize=normalize,)
     else:
         raise NotImplementedError
         
@@ -177,6 +180,8 @@ def preprocess_data(data_type="train", feat_type="raw_all", time_dim=13, all_dat
     #        np.save(OUTDIR+f"{output_file_name}_{feat_type}_{fillna}_{borders[0]}_{borders[1]}_labels.npy", labels_array)
     #    np.save(OUTDIR+f"{output_file_name}_{feat_type}_{fillna}_{borders[0]}_{borders[1]}_data.npy", data)        
     #else:
+    if not normalize:
+        output_file_name = output_file_name + "_nonorm"
     try:
         if data_type == "train":
             np.save(OUTDIR+f"{output_file_name}_{feat_type}_{fillna}_{borders[0]}_{borders[1]}_labels.npy", labels_array)

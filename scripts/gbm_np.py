@@ -3,7 +3,6 @@ import click
 import functools
 import numpy as np
 import pandas as pd 
-import torch
 import ray
 import tempfile
 import json
@@ -12,89 +11,52 @@ import random
 import joblib
 from tqdm.auto import tqdm
 from sklearn.model_selection import StratifiedKFold, train_test_split
+from scipy.stats import randint as sp_randint
+from scipy.stats import uniform as sp_uniform
+    
 import lightgbm as lgb
 
+from pd.gmb_utils import lgb_amex_metric, train_lgbm
 import pd.metric as metric
 from pd.params import *
 #from pd.metric import amex_metric
 
 
-def amex_metric(y_true, y_pred):
-    labels = np.transpose(np.array([y_true, y_pred]))
-    labels = labels[labels[:, 1].argsort()[::-1]]
-    weights = np.where(labels[:,0]==0, 20, 1)
-    cut_vals = labels[np.cumsum(weights) <= int(0.04 * np.sum(weights))]
-    top_four = np.sum(cut_vals[:,0]) / np.sum(labels[:,0])
-    gini = [0,0]
-    for i in [1,0]:
-        labels = np.transpose(np.array([y_true, y_pred]))
-        labels = labels[labels[:, i].argsort()[::-1]]
-        weight = np.where(labels[:,0]==0, 20, 1)
-        weight_random = np.cumsum(weight / np.sum(weight))
-        total_pos = np.sum(labels[:, 0] *  weight)
-        cum_pos_found = np.cumsum(labels[:, 0] * weight)
-        lorentz = cum_pos_found / total_pos
-        gini[i] = np.sum((lorentz - weight_random) * weight)
-    return 0.5 * (gini[1]/gini[0] + top_four)
-
-
-def lgb_amex_metric(y_pred, y_true):
-    y_true = y_true.get_label()
-    return 'amex_metric', amex_metric(y_true, y_pred), True
-
-
-def train_lgbm(data, labels, feature, params, tempdir=None, n_folds=5, seed=42):
-    
-    oof_predictions = np.zeros(len(data))
-    kfold = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=seed)
-    for fold, (trn_ind, val_ind) in enumerate(kfold.split(data, labels)):
-        print(' ')
-        print('-'*50)
-        print(f'Training fold {fold} of {feature} feature...')
-        x_train, x_val = data[trn_ind], data[val_ind]
-        y_train, y_val = labels[trn_ind], labels[val_ind]
-        lgb_train = lgb.Dataset(x_train.reshape(x_train.shape[0], -1), y_train, categorical_feature="auto")
-        lgb_valid = lgb.Dataset(x_val.reshape(x_val.shape[0], -1), y_val, categorical_feature="auto")
-
-        model = lgb.train(
-            params = params,
-            train_set = lgb_train,
-            num_boost_round = 1000,
-            valid_sets = [lgb_train, lgb_valid],
-            early_stopping_rounds = 100,
-            verbose_eval = 100,
-            feval = lgb_amex_metric
-            )
-        # Save best model
-        #joblib.dump(model, tempdir+f'Models/lgbm_fold{fold}_seed{seed}.pkl')
-        val_pred = model.predict(x_val) # Predict validation
-        oof_predictions[val_ind] = val_pred  # Add to out of folds array
-        # Compute fold metric
-        score, gini, recall = metric.amex_metric(y_val.reshape(-1, ), val_pred, return_components=True)
-        print(f'Our fold {fold} CV score is {score}')
-        del x_train, x_val, y_train, y_val, lgb_train, lgb_valid
-        gc.collect()
-    score = amex_metric(labels.reshape(-1, ), oof_predictions, return_components=True)  # Compute out of folds metric
-    print(f'Our out of folds CV score is {score}')
-    # Create a dataframe to store out of folds predictions
-    oof_dir = os.path.join(tempdir, f'{n_folds}fold_seed{seed}_{feature}.npy')
-    np.save(oof_dir, oof_predictions)
-    
-    return (score, gini, recall)
-
-
 @ray.remote
-def worker_fn(data, labels, feature, params, tempdir):
-    return train_lgbm(data, labels, feature, params, tempdir)
+def worker_fn(data, labels, params, feature, tempdir):
+    return train_lgbm(data, labels, params, feature, tempdir)
 
 
-def get_features_scores(data, labels, features, params, tempdir):
+def get_sfa_features_scores(data, labels, features, params, tempdir):
     candidate_rewards_tracker = {}
     candidate_rewards = {}
     remaining_ids = []
     for idx, f in enumerate(features):
         d = data[:, :, idx]
-        indiv_remote_id = worker_fn.remote(d, labels, f, params, tempdir)
+        indiv_remote_id = worker_fn.remote(d, labels, params, f, tempdir)
+        remaining_ids.append(indiv_remote_id)
+        candidate_rewards_tracker[indiv_remote_id] = idx
+
+    while remaining_ids:
+        done_ids, remaining_ids = ray.wait(remaining_ids)
+        result_id = done_ids[0]
+
+        indiv_id = candidate_rewards_tracker[result_id]
+        indiv_reward = ray.get(result_id)
+        candidate_rewards[indiv_id] = indiv_reward
+
+    rewards = {features[i]: candidate_rewards[i] for i in range(len(features))}
+
+    return rewards
+
+
+def gbm_hyper_parameter_opt(data, labels, features, params, tempdir):
+    candidate_rewards_tracker = {}
+    candidate_rewards = {}
+    remaining_ids = []
+    for idx, f in enumerate(features):
+        d = data[:, :, idx]
+        indiv_remote_id = worker_fn.remote(d, labels, params, f, tempdir)
         remaining_ids.append(indiv_remote_id)
         candidate_rewards_tracker[indiv_remote_id] = idx
 
@@ -113,7 +75,13 @@ def get_features_scores(data, labels, features, params, tempdir):
 @click.command()
 @click.option("--n-workers", default=32)
 def run_experiment(n_workers):
-
+    param_test ={'num_leaves': sp_randint(6, 50), 
+                'min_child_samples': sp_randint(100, 500), 
+                'min_child_weight': [1e-5, 1e-3, 1e-2, 1e-1, 1, 1e1, 1e2, 1e3, 1e4],
+                'subsample': sp_uniform(loc=0.2, scale=0.8), 
+                'colsample_bytree': sp_uniform(loc=0.4, scale=0.6),
+                'reg_alpha': [0, 1e-1, 1, 2, 5, 7, 10, 50, 100],
+                'reg_lambda': [0, 1e-1, 1, 5, 10, 20, 50, 100]}
     params = {
         'objective': 'binary',
         'metric': "binary_logloss",
