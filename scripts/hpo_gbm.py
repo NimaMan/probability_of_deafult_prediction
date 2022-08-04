@@ -54,6 +54,7 @@ def train_lgbm(params, tempdir=None, seed=42):
 
 if __name__ == "__main__":
     n_workers = 32   
+    exp_name = "hpo_lgbm_all"
     ray.init(num_cpus=n_workers, ignore_reinit_error=True)
 
     params = {
@@ -73,7 +74,7 @@ if __name__ == "__main__":
         }
 
     run_info = params
-    tempdir = tempfile.mkdtemp(prefix="hpo_lgbm_all", dir=OUTDIR)
+    tempdir = tempfile.mkdtemp(prefix=exp_name, dir=OUTDIR)
     from ray.tune.logger import LoggerCallback
     class CustomLoggerCallback(LoggerCallback):
         """Custom logger interface"""
@@ -101,7 +102,7 @@ if __name__ == "__main__":
         metric="binary_error",
         mode="min",
         config=params,
-        name="experiment_name",
+        name=exp_name,
         callbacks=[CustomLoggerCallback()],
         num_samples=2,
         scheduler=ASHAScheduler(),
