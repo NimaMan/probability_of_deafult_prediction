@@ -37,17 +37,17 @@ def train_lgbm(params, tempdir=None, seed=42):
             early_stopping_rounds = 100,
             verbose_eval = 100,
             feval = lgb_amex_metric,
-            callbacks=[TuneReportCheckpointCallback({
-                    "binary_error": "eval-binary_error",
-                    "binary_logloss": "eval-binary_logloss",
-                })],
+            #callbacks=[TuneReportCheckpointCallback({
+            #        "binary_error": "eval-binary_error",
+            #        "binary_logloss": "eval-binary_logloss",
+            #    })],
             )
 
-    val_pred = model.predict(x_val) # Predict validation
+    val_pred = model.predict(x_val.shape[0], -1) # Predict validation
     score, gini, recall = metric.amex_metric(y_val.reshape(-1, ), val_pred, return_components=True)
     del x_train, x_val, y_train, y_val, lgb_train, lgb_valid
     gc.collect()
-    tune.report(amex=score, gini=gini, recall=recall, done=True)
+    tune.report(amex=score, gini=gini, recall=recall, done=True, binary_error=recall)
 
     return (score, gini, recall)
 

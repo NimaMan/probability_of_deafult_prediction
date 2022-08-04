@@ -1,87 +1,27 @@
 import os
-import click
-import functools
-import numpy as np
-import pandas as pd 
-import ray
+import gc
 import tempfile
 import json
-import gc
+import warnings
+warnings.filterwarnings('ignore')
+import scipy as sp
+import numpy as np
+import pandas as pd
+
 import random
 import joblib
 from tqdm.auto import tqdm
 from sklearn.model_selection import StratifiedKFold, train_test_split
-from scipy.stats import randint as sp_randint
-from scipy.stats import uniform as sp_uniform
-    
+from sklearn.preprocessing import LabelEncoder
 import lightgbm as lgb
 
-from pd.gmb_utils import lgb_amex_metric, train_lgbm
-import pd.metric as metric
 from pd.params import *
-#from pd.metric import amex_metric
+from pd.gmb_utils import lgb_amex_metric
 
 
-@ray.remote
-def worker_fn(data, labels, params, feature, tempdir):
-    return train_lgbm(data, labels, params, feature, tempdir)
 
 
-def get_sfa_features_scores(data, labels, features, params, tempdir):
-    candidate_rewards_tracker = {}
-    candidate_rewards = {}
-    remaining_ids = []
-    for idx, f in enumerate(features):
-        d = data[:, :, idx]
-        indiv_remote_id = worker_fn.remote(d, labels, params, f, tempdir)
-        remaining_ids.append(indiv_remote_id)
-        candidate_rewards_tracker[indiv_remote_id] = idx
-
-    while remaining_ids:
-        done_ids, remaining_ids = ray.wait(remaining_ids)
-        result_id = done_ids[0]
-
-        indiv_id = candidate_rewards_tracker[result_id]
-        indiv_reward = ray.get(result_id)
-        candidate_rewards[indiv_id] = indiv_reward
-
-    rewards = {features[i]: candidate_rewards[i] for i in range(len(features))}
-
-    return rewards
-
-
-def gbm_hyper_parameter_opt(data, labels, features, params, tempdir):
-    candidate_rewards_tracker = {}
-    candidate_rewards = {}
-    remaining_ids = []
-    for idx, f in enumerate(features):
-        d = data[:, :, idx]
-        indiv_remote_id = worker_fn.remote(d, labels, params, f, tempdir)
-        remaining_ids.append(indiv_remote_id)
-        candidate_rewards_tracker[indiv_remote_id] = idx
-
-    while remaining_ids:
-        done_ids, remaining_ids = ray.wait(remaining_ids)
-        result_id = done_ids[0]
-
-        indiv_id = candidate_rewards_tracker[result_id]
-        indiv_reward = ray.get(result_id)
-        candidate_rewards[indiv_id] = indiv_reward
-
-    rewards = {features[i]: candidate_rewards[i] for i in range(len(features))}
-
-    return rewards
-
-@click.command()
-@click.option("--n-workers", default=32)
-def run_experiment(n_workers):
-    param_test ={'num_leaves': sp_randint(6, 50), 
-                'min_child_samples': sp_randint(100, 500), 
-                'min_child_weight': [1e-5, 1e-3, 1e-2, 1e-1, 1, 1e1, 1e2, 1e3, 1e4],
-                'subsample': sp_uniform(loc=0.2, scale=0.8), 
-                'colsample_bytree': sp_uniform(loc=0.4, scale=0.6),
-                'reg_alpha': [0, 1e-1, 1, 2, 5, 7, 10, 50, 100],
-                'reg_lambda': [0, 1e-1, 1, 5, 10, 20, 50, 100]}
+if __name__ == "__main__":
     params = {
         'objective': 'binary',
         'metric': "binary_logloss",
@@ -96,24 +36,34 @@ def run_experiment(n_workers):
         'lambda_l2': 4,
         'min_data_in_leaf': 40
         }
-
+    
     run_info = params
 
     tempdir = tempfile.mkdtemp(prefix="pd_all_lgbm_", dir=OUTDIR)
     with open(os.path.join(tempdir, "run_info.json"), "w") as fh:
         json.dump(run_info, fh, indent=4)
 
-    ray.init(num_cpus=n_workers, ignore_reinit_error=True)
+    from pd.data.preprop import preprocess_data
+    preprocess_data(data_type="train", time_dim=None, all_data=True, fillna="mean_q5_q95", borders=("q5", "q95"))
+    train_data = np.load(OUTDIR+"train_logistic_raw_all_mean_q5_q95_q5_q95_data.npy")
+    train_labels = np.load(OUTDIR+"train_logistic_raw_all_mean_q5_q95_q5_q95_labels.npy.npy")
+
+
+    X_train, X_test, y_train, y_test = train_test_split(train_data, train_labels, test_size=1/9, random_state=0, shuffle=True)
+    validation_data = (X_test, y_test)
+
+    lgb_train = lgb.Dataset(X_train.reshape(X_train.shape[0], -1), y_train)
+    lgb_valid = lgb.Dataset(X_test.reshape(X_test.shape[0], -1), y_test,)
     
-    train = np.load(OUTDIR+"train_raw_all_data.npy")
-    labels = np.load(OUTDIR+"train_raw_all_labels.npy")            
-    scores = get_features_scores(train, labels, featureCols, params, tempdir)
-
-    with open(os.path.join(tempdir, "scores.json"), "w") as fh:
-        json.dump(scores, fh, indent=4)
-
-    ray.shutdown()
-
-
-if __name__ == "__main__":
-    run_experiment()
+    model = lgb.train(
+            params = params,
+            train_set = lgb_train,
+            num_boost_round = 10000,
+            valid_sets = [lgb_train, lgb_valid],
+            early_stopping_rounds = 100,
+            verbose_eval = 100,
+            feval = lgb_amex_metric
+            )
+    
+    model = joblib.load(OUTDIR+f'train_logistic_raw_all_mean_q5_q95_q5_q95_data.pkl')
+        
