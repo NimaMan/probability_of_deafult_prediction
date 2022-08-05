@@ -116,9 +116,13 @@ def get_raw_features(customer_ids, train_data, train_labels=None, test_mode=Fals
     return d, labels_array, id_dict
 
 
-def get_raw_features_fill(customer_ids, train_data, train_labels=None, test_mode=False, 
+def get_raw_features_fill(train_data, train_labels=None, test_mode=False, 
                         normalizer="logistic", time_dim=13, fillna="mean_q5_q95", borders=("q5", "q95"), 
                         cols=None):
+    
+    customer_count =  train_data.customer_ID.value_counts()
+    customer_ids = customer_count.index
+    
     if cols is None:
         cols = featureCols
     # fill nan with mean of each columns
@@ -152,7 +156,10 @@ def get_raw_features_fill(customer_ids, train_data, train_labels=None, test_mode
 
 
 def get_feat_comb(data_type="train", test_mode=False, 
-                        normalizer="logistic", time_dim=13, fillna="mean_q5_q95", borders=("q5", "q95"), ):
+                        normalizer="logistic", time_dim=13, fillna="mean_q5_q95", borders=("q5", "q95"), 
+                        agg=1):
+    
+    output_file_name = f"{data_type}_agg{agg}"
     if data_type == "train":
         data = pd.read_parquet(TRAINDATA)
         train_labels = pd.read_csv(DATADIR+"train_labels.csv")
@@ -160,19 +167,28 @@ def get_feat_comb(data_type="train", test_mode=False,
         data = pd.read_parquet(DATADIR+"test_data.parquet")
         train_labels = None
     
-    customer_count =  data.customer_ID.value_counts()
-    customers = customer_count.index
-    output_file_name = data_type
-
     data_cat_agg = data.groupby("customer_ID")[CATCOLS].agg(['count', 'last', 'nunique']).values.astype(np.int32)  
-    #cont_k97  = [ col for col in ContCols if col in betterTransFeatsK79]
-    #data_cont_agg = data.groupby("customer_ID")[cont_k97].agg(['mean', 'std', 'min', 'max', 'last'])
-    data, labels, id_dict = get_raw_features_fill(customers, data, 
-                                            train_labels=train_labels.set_index("customer_ID"), time_dim=time_dim, 
-                                            fillna=fillna, borders=borders, normalizer=normalizer, cols=ContCols)
+    if agg==1:
+        cols = ContCols
+    elif agg==2:
+        cols = [col for col in ContCols if col not in betterTransFeatsK79]
+        contaggcols = [col for col in ContCols if col in betterTransFeatsK79]
 
-    out_dir = OUTDIR+f"{output_file_name}_agg_{fillna}_{borders[0]}_{borders[1]}.npz"
+        data_cont_agg = data.groupby("customer_ID")[contaggcols].agg(['mean', 'std', 'min', 'max', 'last']).values.astype(np.float32)  
+        data_cat_agg = np.concatenate([data_cat_agg, data_cont_agg], axis=-1)
+
+    data, labels, id_dict = get_raw_features_fill(data, 
+                                            train_labels=train_labels.set_index("customer_ID"), time_dim=time_dim, 
+                                            fillna=fillna, borders=borders, normalizer=normalizer, cols=cols)
+
+    out_dir = OUTDIR+f"{output_file_name}_{fillna}_{borders[0]}_{borders[1]}.npz"
+    if test_mode:
+        output_file_name = f"{output_file_name}_{fillna}_{borders[0]}_{borders[1]}"
+        with open(OUTDIR+f"{output_file_name}_id.json", 'w') as fp:
+            json.dump(id_dict, fp)
+        labels = np.empty(1)
     np.savez(out_dir, d1=data, d2=data_cat_agg, labels=labels)
+
 
 
 def preprocess_data(data_type="train", feat_type="raw_all", time_dim=13, all_data=True, fillna="mean", borders=("q1", "q99"), normalizer="logistic",):

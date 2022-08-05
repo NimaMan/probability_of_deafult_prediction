@@ -27,12 +27,13 @@ def get_agg_data(data_dir="train_agg_mean_q5_q95_q5_q95.npz"):
     df = pd.DataFrame(d["d1"].reshape(d["d1"].shape[0], -1))
     df = pd.concat((df2, df), axis=1,)
     df.columns = [f"c{i}" for i in range(df.shape[1])]
-    cat_indices = list(np.arange(d["d2"].shape[1]))
+    cat_indices = list(np.arange(33))
 
     return df, train_labels, cat_indices
 
 
 if __name__ == "__main__":
+    exp_name = "train_logistic_raw_all_mean_q5_q95_q5_q95_data"
     params = {
         'objective': 'binary',
         'metric': "binary_logloss",
@@ -44,13 +45,13 @@ if __name__ == "__main__":
         'bagging_freq': 10,
         'bagging_fraction': 0.50,
         'n_jobs': -1,
-        'lambda_l2': 4,
+        'lambda_l2': 8,
         'min_data_in_leaf': 40
         }
     
     run_info = params
 
-    tempdir = tempfile.mkdtemp(prefix="pd_all_lgbm_", dir=OUTDIR)
+    tempdir = tempfile.mkdtemp(prefix=f"pd_lgbm_{exp_name}_", dir=OUTDIR)
     with open(os.path.join(tempdir, "run_info.json"), "w") as fh:
         json.dump(run_info, fh, indent=4)
 
@@ -58,8 +59,8 @@ if __name__ == "__main__":
     X_train, X_test, y_train, y_test = train_test_split(train_data, train_labels, test_size=1/9, random_state=0, shuffle=True)
     validation_data = (X_test, y_test)
 
-    lgb_train = lgb.Dataset(X_train.reshape(X_train.shape[0], -1), y_train)
-    lgb_valid = lgb.Dataset(X_test.reshape(X_test.shape[0], -1), y_test,)
+    lgb_train = lgb.Dataset(X_train, y_train)
+    lgb_valid = lgb.Dataset(X_test, y_test,)
     
     model = lgb.train(
             params = params,
@@ -71,5 +72,25 @@ if __name__ == "__main__":
             feval = lgb_amex_metric
             )
     
-    joblib.dump(MODELDIR+f'train_logistic_raw_all_mean_q5_q95_q5_q95_data.pkl')
+    joblib.dump(model, filename=MODELDIR+exp_name)
         
+    del train_data, X_test, X_train, validation_data, lgb_train, lgb_valid
+
+    test_data, labels, cat_indices = get_agg_data(data_dir="test_agg1_mean_q5_q95_q5_q95.npz")
+
+    test_pred = model.predict(test_data) # Predict the test set
+    del test_data
+    gc.collect()
+
+    with open(OUTDIR+'test_agg1_mean_q5_q95_q5_q95_id.json', 'r') as f:
+            test_id_dict = json.load(f)
+    
+    result = pd.DataFrame({"customer_ID":test_id_dict.values(), 
+                        "prediction":test_pred.reshape(-1)
+                        }
+                        )
+
+    sub_file_dir = os.path.join(OUTDIR, f"lgbm_{exp_name}_sub.csv")
+    result.set_index("customer_ID").to_csv(sub_file_dir)
+
+

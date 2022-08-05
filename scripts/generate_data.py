@@ -26,4 +26,8 @@ if __name__ == "__main__":
     #preprocess_data(data_type="train", time_dim=12)
     preprocess_data(data_type="train", time_dim=None, all_data=True, fillna="mean_q5_q95", borders=("q5", "q95"))
     #preprocess_data(data_type="test", time_dim=None, all_data=True, fillna="mean_q5_q95", borders=("q5", "q95"))
-    get_feat_comb(data_type="train", test_mode=False, normalizer="logistic", time_dim=13, fillna="mean_q5_q95", borders=("q5", "q95"),) 
+    get_feat_comb(data_type="train", test_mode=False, normalizer="logistic", time_dim=13, fillna="mean_q5_q95", 
+                    borders=("q5", "q95"), agg=1)
+    get_feat_comb(data_type="test", test_mode=False, normalizer="logistic", time_dim=13, fillna="mean_q5_q95", 
+                    borders=("q5", "q95"), agg=1)
+                     

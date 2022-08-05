@@ -93,4 +93,8 @@ betterTransFeatsK79 = ['R_3', 'D_42', 'R_16', 'R_27', 'D_59', 'P_4', 'D_79', 'D_
        'S_19', 'B_31', 'D_82', 'D_108', 'B_27', 'B_36', 'D_96', 'D_94',
        'D_86', 'D_111', 'D_73', 'D_93', 'D_87', 'R_28', 'D_109', 'S_18',
        'R_23', 'R_18']
+
+agg = {1:"ONly use the transformation from k79 for the cat data",
+	 	2:"Transform all the other features with in addition to the cat data that have better SFA"}
+
 ## Learning 
