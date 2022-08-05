@@ -1,4 +1,6 @@
-## Simdi
+# Simdi
+
+- Finish the lgbm and xgb models 
 
 - main thing that works: training and testing on the 13 data! 
  - Possible questions that it brings 
@@ -17,20 +19,20 @@
 
 - ivnestigate possible different aggregations
 
-- run the lightgbm model
- - investigate later with your own features. Also with the aggregations that you get out of the neural net
+- run the lightgbm, xgb with a variaty of different features
 
-- run SFA
-    - SFA with Conv 
-    - SFA with LGBM 
-    - What does the results of SFA imply? possibly come up with a distribution of Weak learners sampling from the dist of sinfle factor analysis
+- SFA
+    SFA suggests that some feature may be more informative when transformed. Currently investigating combinations of features
+    - What does the results of SFA imply? 
+    
+    -  possibly come up with a distribution of Weak learners sampling from the dist of sinfle factor analysis
 
-- currently running the model with the preprop from the kaglle
-
-- Run a ensemble over the probs out of lgbm with MLP, CNN, Att
 
 - Different precisons from the official pytorch 
 
+## Categorical data
+    Transform the categorical data
+    - Later pay speacial attention to the B_38
 ### Olan
 -  I have a convolutional model that works pretty good for the C13
 
@@ -49,3 +51,7 @@
 - Add the predictions from other models to the features that you have. 
 
 - Investigate ranked probabilities
+
+# Ensemble
+Will come up with a couple of ensemble models. 
+    - Add the predictions of lgbm and xgb as a feature to conv

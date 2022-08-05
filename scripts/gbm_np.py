@@ -19,6 +19,17 @@ from pd.params import *
 from pd.gmb_utils import lgb_amex_metric
 
 
+def get_agg_data(data_dir="train_agg_mean_q5_q95_q5_q95.npz"):
+    d = np.load(OUTDIR+data_dir)
+    #train_data = np.concatenate((d["d2"].astype(np.int32), d["d1"].reshape(d["d1"].shape[0], -1)), axis=1)
+    train_labels = d["labels"]
+    df2 = pd.DataFrame(d["d2"].astype(np.int32))
+    df = pd.DataFrame(d["d1"].reshape(d["d1"].shape[0], -1))
+    df = pd.concat((df2, df), axis=1,)
+    df.columns = [f"c{i}" for i in range(df.shape[1])]
+    cat_indices = list(np.arange(d["d2"].shape[1]))
+
+    return df, train_labels, cat_indices
 
 
 if __name__ == "__main__":
@@ -43,12 +54,7 @@ if __name__ == "__main__":
     with open(os.path.join(tempdir, "run_info.json"), "w") as fh:
         json.dump(run_info, fh, indent=4)
 
-    from pd.data.preprop import preprocess_data
-    preprocess_data(data_type="train", time_dim=None, all_data=True, fillna="mean_q5_q95", borders=("q5", "q95"))
-    train_data = np.load(OUTDIR+"train_logistic_raw_all_mean_q5_q95_q5_q95_data.npy")
-    train_labels = np.load(OUTDIR+"train_logistic_raw_all_mean_q5_q95_q5_q95_labels.npy.npy")
-
-
+    train_data, train_labels, cat_indices = get_agg_data(data_dir="train_agg_mean_q5_q95_q5_q95.npz")
     X_train, X_test, y_train, y_test = train_test_split(train_data, train_labels, test_size=1/9, random_state=0, shuffle=True)
     validation_data = (X_test, y_test)
 
@@ -58,12 +64,12 @@ if __name__ == "__main__":
     model = lgb.train(
             params = params,
             train_set = lgb_train,
-            num_boost_round = 10000,
+            num_boost_round = 10500,
             valid_sets = [lgb_train, lgb_valid],
             early_stopping_rounds = 100,
             verbose_eval = 100,
             feval = lgb_amex_metric
             )
     
-    model = joblib.load(OUTDIR+f'train_logistic_raw_all_mean_q5_q95_q5_q95_data.pkl')
+    joblib.dump(MODELDIR+f'train_logistic_raw_all_mean_q5_q95_q5_q95_data.pkl')
         

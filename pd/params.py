@@ -1,7 +1,8 @@
 
+import os 
 import sys 
 import pickle 
-
+from pathlib import Path
 
 BATCH_SIZE = 20000
 
@@ -17,16 +18,23 @@ OUTDIR = None
 if sys.platform == "darwin":
     DATADIR = "/Users/nimamanaf/Desktop/kaggle/pd/data/"
     OUTDIR = "/Users/nimamanaf/Desktop/kaggle/pd/data/out/"
+    MODELDIR = "/Users/nimamanaf/Desktop/kaggle/pd/data/out/Models/"
 elif sys.platform == 'win32':
     DATADIR = "C:\\Users\\20204069\\Desktop\\Kaggle\\pd\\data\\"
     OUTDIR = "C:\\Users\\20204069\\Desktop\\Kaggle\\pd\\data\\out\\"
+    MODELDIR = "C:\\Users\\20204069\\Desktop\\Kaggle\\pd\\data\\Models\\"
 
 elif sys.platform == 'linux':
 	DATADIR = "/home/tue/20204069/pd/data/"
 	OUTDIR = "/home/tue/20204069/pd/data/out/"
-    #DATADIR = "/home/nimamd/pd/data/"
+	MODELDIR = "/home/tue/20204069/pd/data/Models/"
+    
+	#DATADIR = "/home/nimamd/pd/data/"
     #OUTDIR = "/home/nimamd/pd/data/out/"
+    #MODELDIR = "/home/nimamd/pd/data/Models/"
 
+if not os.path.exists(MODELDIR):
+    os.makedirs(MODELDIR)
 try:
 	with open(OUTDIR+"col_info.pkl", "rb") as f:
 		col_info = pickle.load(f)
