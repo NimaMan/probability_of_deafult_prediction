@@ -55,3 +55,33 @@
 # Ensemble
 Will come up with a couple of ensemble models. 
     - Add the predictions of lgbm and xgb as a feature to conv
+
+
+
+
+# Results
+
+- ContCols + Cat cols transformed -> 793 (could possibly have been improved with CV and early stopping) 
+
+- K79 + 6 best 13 overfits significantly with 799 on validation data and somehow 785 on real test data!!
+
+
+# Current repeat procedure 
+
+## FE 
+
+
+
+## Models 
+
+
+## HPO
+
+
+## CV
+
+
+
+## Ensemble
+
+

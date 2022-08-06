@@ -16,18 +16,19 @@ from ray.tune.schedulers import ASHAScheduler
 from ray.tune.integration.lightgbm import TuneReportCheckpointCallback
 
 import pd.metric as metric
-from pd.gmb_utils import lgb_amex_metric
+from pd.gmb_utils import lgb_amex_metric, get_agg_data
 from pd.params import *
 
 
 def train_lgbm(params, tempdir=None, seed=42):
-    
-    data = np.load(OUTDIR+"train_raw_all_data.npy")
-    labels = np.load(OUTDIR+"train_raw_all_labels.npy")            
-    
+    agg = 0
+    #data = np.load(OUTDIR+"train_raw_all_data.npy")
+    #labels = np.load(OUTDIR+"train_raw_all_labels.npy")            
+    data, labels, cat_indices = get_agg_data(data_dir=f"train_agg{agg}_mean_q5_q95_q5_q95.npz")
+
     x_train, x_val, y_train, y_val = train_test_split(data, labels, test_size=0.15)
-    lgb_train = lgb.Dataset(x_train.reshape(x_train.shape[0], -1), y_train, categorical_feature="auto")
-    lgb_valid = lgb.Dataset(x_val.reshape(x_val.shape[0], -1), y_val, categorical_feature="auto")
+    lgb_train = lgb.Dataset(x_train, y_train, categorical_feature="auto")
+    lgb_valid = lgb.Dataset(x_val, y_val, categorical_feature="auto")
 
     model = lgb.train(
             params = params,
@@ -43,7 +44,7 @@ def train_lgbm(params, tempdir=None, seed=42):
             #    })],
             )
 
-    val_pred = model.predict(x_val.shape[0], -1) # Predict validation
+    val_pred = model.predict(x_val) # Predict validation
     score, gini, recall = metric.amex_metric(y_val.reshape(-1, ), val_pred, return_components=True)
     del x_train, x_val, y_train, y_val, lgb_train, lgb_valid
     gc.collect()
@@ -53,8 +54,9 @@ def train_lgbm(params, tempdir=None, seed=42):
 
 
 if __name__ == "__main__":
-    n_workers = 32   
-    exp_name = "hpo_lgbm_all"
+    n_workers = 128   
+    agg = 0 
+    exp_name = f"train_agg{agg}_mean_q5_q95_q5_q95_data"
     ray.init(num_cpus=n_workers, ignore_reinit_error=True)
 
     params = {
@@ -64,12 +66,13 @@ if __name__ == "__main__":
         #'boosting': 'dart',
         'seed': 42,
         'num_leaves': tune.grid_search([10, 100, 1000]),
-        'learning_rate': tune.loguniform(1e-8, 1e-1),
+        'learning_rate': tune.loguniform(5e-3, 5e-1),
         'feature_fraction': 0.20,
         'bagging_freq': 10,
         'bagging_fraction': 0.50,
         'n_jobs': -1,
-        'lambda_l2': tune.randint(1, 32),
+        'lambda_l2': tune.grid_search([2, 8, 16]),
+        'lambda_l1': tune.grid_search([2, 8, 16]),
         'min_data_in_leaf': tune.randint(40, 4000)
         }
 
@@ -104,7 +107,7 @@ if __name__ == "__main__":
         config=params,
         name=exp_name,
         callbacks=[CustomLoggerCallback()],
-        num_samples=2,
+        num_samples=4,
         scheduler=ASHAScheduler(),
     )
      

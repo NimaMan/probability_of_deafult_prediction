@@ -82,3 +82,16 @@ def train_lgbm(data, labels, params, feature=None, tempdir=None, n_folds=5, seed
     np.save(oof_dir, oof_predictions)
     
     return (score, gini, recall)
+
+
+def get_agg_data(data_dir="train_agg_mean_q5_q95_q5_q95.npz"):
+    d = np.load(OUTDIR+data_dir)
+    #train_data = np.concatenate((d["d2"].astype(np.int32), d["d1"].reshape(d["d1"].shape[0], -1)), axis=1)
+    train_labels = d["labels"]
+    df2 = pd.DataFrame(d["d2"].astype(np.int32))
+    df = pd.DataFrame(d["d1"].reshape(d["d1"].shape[0], -1))
+    df = pd.concat((df2, df), axis=1,)
+    df.columns = [f"c{i}" for i in range(df.shape[1])]
+    cat_indices = list(np.arange(33))
+
+    return df, train_labels, cat_indices

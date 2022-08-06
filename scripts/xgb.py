@@ -13,8 +13,8 @@ import joblib
 from tqdm.auto import tqdm
 from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.preprocessing import LabelEncoder
-import lightgbm as lgb
-
+from sklearn.model_selection import KFold
+import xgboost as xgb
 from pd.params import *
 from pd.gmb_utils import lgb_amex_metric
 
@@ -35,21 +35,19 @@ def get_agg_data(data_dir="train_agg_mean_q5_q95_q5_q95.npz"):
 if __name__ == "__main__":
     agg = 0 
     exp_name = f"train_agg{agg}_mean_q5_q95_q5_q95_data"
-    params = {
-        'objective': 'binary',
-        'metric': "binary_logloss",
-        'boosting': 'dart',
-        'seed': 42,
-        'num_leaves': 50,
-        'learning_rate': 0.01,
-        'feature_fraction': 0.20,
-        'bagging_freq': 10,
-        'bagging_fraction': 0.50,
-        'n_jobs': -1,
-        'lambda_l2': 16,
-        'lambda_l1': 16,
-        'min_data_in_leaf': 40
-        }
+    # XGB MODEL PARAMETERS
+    random_state = 42
+    xgb_parms = { 
+    'max_depth':4, 
+    'learning_rate':0.05, 
+    'subsample':0.8,
+    'colsample_bytree':0.6, 
+    'eval_metric':'logloss',
+    'objective':'binary:logistic',
+    'tree_method':'gpu_hist',
+    'predictor':'gpu_predictor',
+    'random_state':random_state
+    }
     
     run_info = params
 
@@ -61,19 +59,43 @@ if __name__ == "__main__":
     X_train, X_test, y_train, y_test = train_test_split(train_data, train_labels, test_size=1/9, random_state=0, shuffle=True)
     validation_data = (X_test, y_test)
 
-    lgb_train = lgb.Dataset(X_train, y_train)
-    lgb_valid = lgb.Dataset(X_test, y_test,)
     
     print(f"Start training LGB {exp_name} with number of feature {X_train.shape[1]}", params)
-    model = lgb.train(
-            params = params,
-            train_set = lgb_train,
-            num_boost_round = 10500,
-            valid_sets = [lgb_train, lgb_valid],
-            early_stopping_rounds = 100,
-            verbose_eval = 100,
-            feval = lgb_amex_metric
-            )
+     # TRAIN, VALID, TEST FOR FOLD K
+    Xy_train = IterLoadForDMatrix(train.loc[train_idx], FEATURES, 'target')
+    X_valid = train.loc[valid_idx, FEATURES]
+    y_valid = train.loc[valid_idx, 'target']
+    
+    dtrain = xgb.DeviceQuantileDMatrix(Xy_train, max_bin=256)
+    dvalid = xgb.DMatrix(data=X_valid, label=y_valid)
+    
+    # TRAIN MODEL FOLD K
+    model = xgb.train(xgb_parms, 
+                dtrain=dtrain,
+                evals=[(dtrain,'train'),(dvalid,'valid')],
+                num_boost_round=9999,
+                early_stopping_rounds=100,
+                verbose_eval=100) 
+    model.save_model(f'XGB_v{VER}_fold{fold}.xgb')
+    
+    # GET FEATURE IMPORTANCE FOR FOLD K
+    dd = model.get_score(importance_type='weight')
+    df = pd.DataFrame({'feature':dd.keys(),f'importance_{fold}':dd.values()})
+    importances.append(df)
+            
+    # INFER OOF FOLD K
+    oof_preds = model.predict(dvalid)
+    acc = amex_metric_mod(y_valid.values, oof_preds)
+    print('Kaggle Metric =',acc,'\n')
+    
+    # SAVE OOF
+    df = train.loc[valid_idx, ['customer_ID','target'] ].copy()
+    df['oof_pred'] = oof_preds
+    oof.append( df )
+    
+    del dtrain, Xy_train, dd, df
+    del X_valid, y_valid, dvalid, model
+    _ = gc.collect()
     
     joblib.dump(model, filename=MODELDIR+exp_name)
         
