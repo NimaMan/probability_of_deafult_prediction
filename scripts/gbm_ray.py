@@ -27,28 +27,6 @@ def worker_fn(data, labels, params, feature, tempdir):
     return train_lgbm(data, labels, params, feature, tempdir)
 
 
-def get_sfa_features_scores(data, labels, features, params, tempdir):
-    candidate_rewards_tracker = {}
-    candidate_rewards = {}
-    remaining_ids = []
-    for idx, f in enumerate(features):
-        d = data[:, :, idx]
-        indiv_remote_id = worker_fn.remote(d, labels, params, f, tempdir)
-        remaining_ids.append(indiv_remote_id)
-        candidate_rewards_tracker[indiv_remote_id] = idx
-
-    while remaining_ids:
-        done_ids, remaining_ids = ray.wait(remaining_ids)
-        result_id = done_ids[0]
-
-        indiv_id = candidate_rewards_tracker[result_id]
-        indiv_reward = ray.get(result_id)
-        candidate_rewards[indiv_id] = indiv_reward
-
-    rewards = {features[i]: candidate_rewards[i] for i in range(len(features))}
-
-    return rewards
-
 
 def gbm_hyper_parameter_opt(data, labels, features, params, tempdir):
     candidate_rewards_tracker = {}
@@ -75,13 +53,6 @@ def gbm_hyper_parameter_opt(data, labels, features, params, tempdir):
 @click.command()
 @click.option("--n-workers", default=32)
 def run_experiment(n_workers):
-    param_test ={'num_leaves': sp_randint(6, 50), 
-                'min_child_samples': sp_randint(100, 500), 
-                'min_child_weight': [1e-5, 1e-3, 1e-2, 1e-1, 1, 1e1, 1e2, 1e3, 1e4],
-                'subsample': sp_uniform(loc=0.2, scale=0.8), 
-                'colsample_bytree': sp_uniform(loc=0.4, scale=0.6),
-                'reg_alpha': [0, 1e-1, 1, 2, 5, 7, 10, 50, 100],
-                'reg_lambda': [0, 1e-1, 1, 5, 10, 20, 50, 100]}
     params = {
         'objective': 'binary',
         'metric': "binary_logloss",
@@ -94,12 +65,13 @@ def run_experiment(n_workers):
         'bagging_fraction': 0.50,
         'n_jobs': -1,
         'lambda_l2': 4,
+        'lambda_l1': 4,
         'min_data_in_leaf': 40
         }
 
     run_info = params
 
-    tempdir = tempfile.mkdtemp(prefix="pd_all_lgbm_", dir=OUTDIR)
+    tempdir = tempfile.mkdtemp(prefix="pd_lgbm_", dir=OUTDIR)
     with open(os.path.join(tempdir, "run_info.json"), "w") as fh:
         json.dump(run_info, fh, indent=4)
 
@@ -107,8 +79,7 @@ def run_experiment(n_workers):
     
     train = np.load(OUTDIR+"train_raw_all_data.npy")
     labels = np.load(OUTDIR+"train_raw_all_labels.npy")            
-    scores = get_features_scores(train, labels, featureCols, params, tempdir)
-
+    
     with open(os.path.join(tempdir, "scores.json"), "w") as fh:
         json.dump(scores, fh, indent=4)
 

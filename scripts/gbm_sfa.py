@@ -127,6 +127,27 @@ def get_features_scores(data, features, params, tempdir=None, n_folds=2, seed=42
 
     return candidate_rewards
 
+def get_sfa_features_scores(data, labels, features, params, tempdir):
+    candidate_rewards_tracker = {}
+    candidate_rewards = {}
+    remaining_ids = []
+    for idx, f in enumerate(features):
+        d = data[:, :, idx]
+        indiv_remote_id = worker_fn.remote(d, labels, params, f, tempdir)
+        remaining_ids.append(indiv_remote_id)
+        candidate_rewards_tracker[indiv_remote_id] = idx
+
+    while remaining_ids:
+        done_ids, remaining_ids = ray.wait(remaining_ids)
+        result_id = done_ids[0]
+
+        indiv_id = candidate_rewards_tracker[result_id]
+        indiv_reward = ray.get(result_id)
+        candidate_rewards[indiv_id] = indiv_reward
+
+    rewards = {features[i]: candidate_rewards[i] for i in range(len(features))}
+
+    return rewards
 
 @click.command()
 @click.option("--n-workers", default=32)

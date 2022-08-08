@@ -149,12 +149,13 @@ def get_feat_comb(data_type="train",
         data_cont_agg = data_cont_agg.loc[customers].values.astype(np.float32)
         data_cat_agg = np.concatenate([data_cat_agg, data_cont_agg], axis=-1)
     
-    out_dir = OUTDIR+f"{output_file_name}_{fillna}_{borders[0]}_{borders[1]}.npz"
+    output_file_name = f"{output_file_name}_{fillna}_{borders[0]}_{borders[1]}"
+    out_dir = OUTDIR+f"{output_file_name}.npz"
     if test_mode:
-        output_file_name = f"{output_file_name}_{fillna}_{borders[0]}_{borders[1]}"
-        with open(OUTDIR+f"{output_file_name}_id.json", 'w') as fp:
-            json.dump(id_dict, fp)
         labels = np.empty(1)
+    
+    with open(OUTDIR+f"{output_file_name}_id.json", 'w') as fp:
+            json.dump(id_dict, fp)
     np.savez(out_dir, d1=data13, d2=data_cat_agg, labels=labels)
 
 

@@ -3,6 +3,7 @@ import os
 import sys 
 import pickle 
 from pathlib import Path
+import pandas as pd
 
 BATCH_SIZE = 20000
 
@@ -33,9 +34,20 @@ elif sys.platform == 'linux':
 	OUTDIR = "/home/nimamd/pd/data/out/"
 	MODELDIR = "/home/nimamd/pd/data/Models/"
 
-
+TRAINDATA = DATADIR + "train_data.parquet"
+TESTDATA = DATADIR + "test_data.parquet"
+TRAINLABELS = DATADIR+'train_labels.csv'
 if not os.path.exists(MODELDIR):
     os.makedirs(MODELDIR)
+PREDDIR = OUTDIR+"PRED/"
+if not os.path.exists(PREDDIR):
+    os.makedirs(PREDDIR)
+
+if not os.path.exists(os.path.join(PREDDIR, "train_pred.csv")):
+	train_labels = pd.read_csv(TRAINLABELS)
+	train_labels.set_index("customer_ID").to_csv(os.path.join(PREDDIR, "train_pred.csv"))
+	pd.DataFrame({"customer_ID":pd.read_parquet(TESTDATA).customer_ID.unique()}).to_csv(os.path.join(PREDDIR, "test_pred.csv"))
+
 try:
 	with open(OUTDIR+"col_info.pkl", "rb") as f:
 		col_info = pickle.load(f)
@@ -48,8 +60,6 @@ try:
 except Exception as e:
 	print(e)
 
-TRAINDATA = DATADIR + "train_data.parquet"
-TESTDATA = DATADIR + "test_data.parquet"
 
 # data
 dataCols = ['customer_ID', 'S_2', 'P_2', 'D_39', 'B_1', 'B_2', 'R_1', 'S_3', 'D_41','B_3',
