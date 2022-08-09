@@ -6,7 +6,7 @@ import torch
 import json
 
 from pd.params import *
-from pd.nn.model import Conv
+from pd.nn.conv import Conv
 
 
 def pred13(model):

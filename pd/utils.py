@@ -1,6 +1,8 @@
+#%%
 import os 
 import pickle 
 import gzip 
+import torch
 import numpy as np
 from pd.params import *
 
@@ -28,6 +30,16 @@ def load_pickle_data(path):
         data = pickle.load(f)
 
     return data
+
+
+def get_torch_agg_data(data_dir="train_agg_mean_q5_q95_q5_q95.npz"):
+    d = np.load(OUTDIR+data_dir)
+    #train_data = np.concatenate((d["d2"].astype(np.int32), d["d1"].reshape(d["d1"].shape[0], -1)), axis=1)
+    train_labels = d["labels"]
+    cat_vars = d["d2"].astype(np.float32)
+    cont_vars = d["d1"]
+    
+    return cont_vars, cat_vars, train_labels
 
 
 def get_customers_data_indices(num_data_points=[13], id_dir='train_agg1_mean_q5_q95_q5_q95_id.json'):

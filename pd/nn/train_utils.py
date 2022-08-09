@@ -59,8 +59,4 @@ def train_torch_model(model, train_loader,  validation_data=None, output_model_n
                 torch.save(model.state_dict(), output_file)
                 predict(model=model, model_name=output)
 
-
-
-
-
     return model

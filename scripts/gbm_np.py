@@ -1,6 +1,7 @@
 import os
 import gc
 import tempfile
+import click
 import json
 import warnings
 warnings.filterwarnings('ignore')
@@ -103,7 +104,7 @@ def train_lgbm_cv(data, labels, indices, params, model_name, tempdir=None, n_fol
     return best_model
 
 
-def test_lgbm(model, exp_name, test_data_name=f"test_agg1_mean_q5_q95_q5_q95"):
+def test_lgbm(model, model_name, test_data_name=f"test_agg1_mean_q5_q95_q5_q95"):
 
     test_data_dir = f"{test_data_name}.npz"
     test_data, labels, cat_indices = get_agg_data(data_dir=test_data_dir)
@@ -119,17 +120,17 @@ def test_lgbm(model, exp_name, test_data_name=f"test_agg1_mean_q5_q95_q5_q95"):
                         }
                         )
 
-    sub_file_dir = os.path.join(OUTDIR, f"{exp_name}.csv")
+    sub_file_dir = os.path.join(OUTDIR, f"{model_name}.csv")
     result.set_index("customer_ID").to_csv(sub_file_dir)
     
-    merge_with_pred(test_pred, indices_test=np.arange(len(test_pred.shape[0])),
+    merge_with_pred(test_pred, indices_test=np.arange(len(test_pred)),
                     model_name=model_name, type="test", id_dir=f'{test_data_name}_id.json')
     
 
-
-
-if __name__ == "__main__":
-    agg = 1 
+@click.command()
+@click.option("--agg", default=1)
+@click.option("--n_workers", default=127)
+def run_experiment(agg, n_workers):
     exp_name = f"train_agg{agg}_mean_q5_q95_q5_q95_data"
     params = {
         'objective': 'binary',
@@ -141,7 +142,7 @@ if __name__ == "__main__":
         'feature_fraction': 0.20,
         'bagging_freq': 10,
         'bagging_fraction': 0.50,
-        'n_jobs': 31,
+        'n_jobs': n_workers,
         'lambda_l2': 4,
         'lambda_l1': 4,
         'min_data_in_leaf': 40, 
@@ -157,9 +158,15 @@ if __name__ == "__main__":
     train_data, train_labels, cat_indices = get_agg_data(data_dir=f"train_agg{agg}_mean_q5_q95_q5_q95.npz")
     
     model_name = f"lgbm13_agg{agg}"
-    c13_indices, other_indices = get_customers_data_indices(num_data_points=[13], id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')
-    model = train_lgbm_cv(train_data, train_labels, c13_indices, params, model_name=model_name, tempdir=tempdir, n_folds=5, seed=42)
+    indices = get_customers_data_indices(num_data_points=[13], id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')
+    model = train_lgbm_cv(train_data, train_labels, indices, params, model_name=model_name, tempdir=tempdir, n_folds=5, seed=42)
 
     model_name = f"lgbm_agg{agg}"
     indices, _ = get_customers_data_indices(num_data_points=np.arange(14), id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')
     model = train_lgbm_cv(train_data, train_labels, indices, params, model_name=model_name, tempdir=tempdir, n_folds=5, seed=42)
+
+    test_lgbm(model, model_name, test_data_name=f"test_agg{agg}_mean_q5_q95_q5_q95")
+
+
+if __name__ == "__main__":
+    run_experiment()

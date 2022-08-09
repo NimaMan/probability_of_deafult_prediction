@@ -9,7 +9,7 @@ BATCH_SIZE = 20000
 
 ## log 
 PerfThreshold = 0.84
-valThreshold = 0.78
+valThreshold = 0.795
 logBestIndiv = 20
 
 
