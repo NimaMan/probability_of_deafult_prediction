@@ -39,7 +39,7 @@ TESTDATA = DATADIR + "test_data.parquet"
 TRAINLABELS = DATADIR+'train_labels.csv'
 if not os.path.exists(MODELDIR):
     os.makedirs(MODELDIR)
-PREDDIR = OUTDIR+"PRED/"
+PREDDIR = DATADIR+"PRED/"
 if not os.path.exists(PREDDIR):
     os.makedirs(PREDDIR)
 

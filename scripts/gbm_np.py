@@ -53,13 +53,16 @@ def train_lgbm_cv(data, labels, indices, params, model_name, tempdir=None, n_fol
     """
     take the data in certain indices [for example c13 data]
     """
-    oof_predictions = np.zeros(len(data))
+    used_indices, other_indices = indices
+    print(f"training the {model_name}", params)
+    oof_predictions = np.zeros(len(used_indices))
+    best_model_name, best_model_score = "", 0
     kfold = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=seed)
-    for fold, (trn_ind, val_ind) in enumerate(kfold.split(data.iloc[indices], labels[indices], indices)):
+    for fold, (trn_ind, val_ind) in enumerate(kfold.split(data.iloc[used_indices], labels[used_indices], used_indices)):
         print(' ')
         print('-'*50)
         print(f'Training fold {fold} ...')
-        x_train, x_val = data[trn_ind], data[val_ind]
+        x_train, x_val = data.iloc[trn_ind], data.iloc[val_ind]
         y_train, y_val = labels[trn_ind], labels[val_ind]
         lgb_train = lgb.Dataset(x_train, y_train, )
         lgb_valid = lgb.Dataset(x_val, y_val, )
@@ -67,7 +70,7 @@ def train_lgbm_cv(data, labels, indices, params, model_name, tempdir=None, n_fol
         model = lgb.train(
             params = params,
             train_set = lgb_train,
-            num_boost_round = 1000,
+            num_boost_round = 10500,
             valid_sets = [lgb_train, lgb_valid],
             early_stopping_rounds = 100,
             verbose_eval = 100,
@@ -78,19 +81,26 @@ def train_lgbm_cv(data, labels, indices, params, model_name, tempdir=None, n_fol
         
         # Compute fold metric
         score, gini, recall = metric.amex_metric(y_val.reshape(-1, ), val_pred, return_components=True)
-        joblib.dump(model, os.path.join(MODELDIR, f'{model_name}_{int(score*10000)}.pkl'))
-        
-        indices_test = indices[val_ind]
-        merge_with_pred(val_pred, indices_test, model_name=model_name)
+        joblib.dump(model, os.path.join(MODELDIR, f'{model_name}_{int(score*10000)}'))
+        if score > best_model_score:
+            best_model_name = f'{model_name}_{int(score*10000)}'
+            best_model_score = score
+
+        pred_indices = used_indices[val_ind]
+        merge_with_pred(val_pred, pred_indices, model_name=model_name)
     
         print(f'Our fold {fold} CV score is {score}')
         del x_train, x_val, y_train, y_val, lgb_train, lgb_valid
         gc.collect()
-
     score, gini, recall = metric.amex_metric(labels.reshape(-1, ), oof_predictions, return_components=True)  # Compute out of folds metric
     print(f'Our out of folds CV score is {score}, Gini {gini}, recall {recall}')
     
-    return model
+    best_model = joblib.load(os.path.join(MODELDIR, best_model_name))
+    if len(other_indices) > 0:
+        other_pred = best_model.predict(data.iloc[other_indices])
+        merge_with_pred(other_pred, other_indices, model_name=model_name)
+    
+    return best_model
 
 
 def test_lgbm(model, exp_name, test_data_name=f"test_agg1_mean_q5_q95_q5_q95"):
@@ -131,10 +141,12 @@ if __name__ == "__main__":
         'feature_fraction': 0.20,
         'bagging_freq': 10,
         'bagging_fraction': 0.50,
-        'n_jobs': -1,
+        'n_jobs': 31,
         'lambda_l2': 4,
         'lambda_l1': 4,
-        'min_data_in_leaf': 40
+        'min_data_in_leaf': 40, 
+        'max_bin': 255,  # Deafult is 255
+
         }
     
     run_info = params
@@ -145,9 +157,9 @@ if __name__ == "__main__":
     train_data, train_labels, cat_indices = get_agg_data(data_dir=f"train_agg{agg}_mean_q5_q95_q5_q95.npz")
     
     model_name = f"lgbm13_agg{agg}"
-    c13_indices = get_customers_data_indices(num_data_points=[13], id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')
+    c13_indices, other_indices = get_customers_data_indices(num_data_points=[13], id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')
     model = train_lgbm_cv(train_data, train_labels, c13_indices, params, model_name=model_name, tempdir=tempdir, n_folds=5, seed=42)
 
     model_name = f"lgbm_agg{agg}"
-    indices = get_customers_data_indices(num_data_points=np.arange(14), id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')
+    indices, _ = get_customers_data_indices(num_data_points=np.arange(14), id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')
     model = train_lgbm_cv(train_data, train_labels, indices, params, model_name=model_name, tempdir=tempdir, n_folds=5, seed=42)

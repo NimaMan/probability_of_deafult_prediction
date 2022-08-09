@@ -77,7 +77,7 @@ Will come up with a couple of ensemble models.
 
 ## HPO
 
-
+- consider using the max_bin_by_feature of the lightgbm
 ## CV
 
 
