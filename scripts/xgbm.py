@@ -5,52 +5,21 @@ import click
 import json
 import warnings
 warnings.filterwarnings('ignore')
-import scipy as sp
 import numpy as np
 import pandas as pd
 
-import random
 import joblib
 from tqdm.auto import tqdm
-from sklearn.model_selection import StratifiedKFold, train_test_split
-from sklearn.preprocessing import LabelEncoder
-import lightgbm as lgb
+from sklearn.model_selection import StratifiedKFold
+import xgboost as xgb
 
 import pd.metric as metric
 from pd.utils import merge_with_pred, get_customers_data_indices
 from pd.params import *
-from pd.gmb_utils import lgb_amex_metric, get_agg_data
+from pd.gmb_utils import get_agg_data, xgb_amex
 
 
-def train_lgbm(train_data, train_labels, params, exp_name):
-
-    train_indices = np.arange(train_labels.shape[0])
-    X_train, X_test, y_train, y_test, indices_train, indices_test = train_test_split(train_data, train_labels, train_indices, test_size=1/9, random_state=0, shuffle=True)
-    validation_data = (X_test, y_test)
-    lgb_train = lgb.Dataset(X_train, y_train)
-    lgb_valid = lgb.Dataset(X_test, y_test,)
-    
-    print(f"Start training LGB {exp_name} with number of feature {X_train.shape[1]}", params)
-    model = lgb.train(
-            params = params,
-            train_set = lgb_train,
-            num_boost_round = 10500,
-            valid_sets = [lgb_train, lgb_valid],
-            early_stopping_rounds = 100,
-            verbose_eval = 100,
-            feval = lgb_amex_metric
-            )
-    
-    joblib.dump(model, filename=MODELDIR+exp_name)
-    y_pred = model.predict(X_test)
-    merge_with_pred(y_pred, indices_test, model_name="lgbm13")
-    del train_data, X_test, X_train, validation_data, lgb_train, lgb_valid
-    gc.collect()
-
-    return model 
-
-
-def train_lgbm_cv(data, labels, indices, params, model_name, tempdir=None, n_folds=5, seed=42):
+def train_xgb_cv(data, labels, indices, params, model_name, tempdir=None, n_folds=5, seed=42):
     """
     take the data in certain indices [for example c13 data]
     """
@@ -60,22 +29,23 @@ def train_lgbm_cv(data, labels, indices, params, model_name, tempdir=None, n_fol
     best_model_name, best_model_score = "", 0
     kfold = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=seed)
     for fold, (trn_ind, val_ind) in enumerate(kfold.split(data.iloc[used_indices], labels[used_indices], used_indices)):
+        print(' ')
         print('-'*50)
         print(f'Training fold {fold} ...')
         x_train, x_val = data.iloc[used_indices].iloc[trn_ind], data.iloc[used_indices].iloc[val_ind]
         y_train, y_val = labels[used_indices][trn_ind], labels[used_indices][val_ind]
-        
-        lgb_train = lgb.Dataset(x_train, y_train, )
-        lgb_valid = lgb.Dataset(x_val, y_val, )
+        xgb_train = xgb.DMatrix(x_train, y_train, )
+        xgb_valid = xgb.DMatrix(x_val, y_val, )
 
-        model = lgb.train(
+        model =  xgb.train(
             params = params,
-            train_set = lgb_train,
+            dtrain = xgb_train,
+            maximize = True,
             num_boost_round = 10500,
-            valid_sets = [lgb_train, lgb_valid],
+            evals = [(xgb_train, 'train'), (xgb_valid, 'valid')],
             early_stopping_rounds = 100,
             verbose_eval = 100,
-            feval = lgb_amex_metric
+            feval = xgb_amex
             )
         val_pred = model.predict(x_val) # Predict validation
         oof_predictions[val_ind] = val_pred  # Add to out of folds array
@@ -93,7 +63,7 @@ def train_lgbm_cv(data, labels, indices, params, model_name, tempdir=None, n_fol
         print(f'Our fold {fold} CV score is {score}')
         del x_train, x_val, y_train, y_val, lgb_train, lgb_valid
         gc.collect()
-    score, gini, recall = metric.amex_metric(labels[used_indices].reshape(-1, ), oof_predictions, return_components=True)  # Compute out of folds metric
+    score, gini, recall = metric.amex_metric(labels.reshape(-1, ), oof_predictions, return_components=True)  # Compute out of folds metric
     print(f'Our out of folds CV score is {score}, Gini {gini}, recall {recall}')
     
     best_model = joblib.load(os.path.join(MODELDIR, best_model_name))
@@ -104,7 +74,7 @@ def train_lgbm_cv(data, labels, indices, params, model_name, tempdir=None, n_fol
     return best_model
 
 
-def test_lgbm(model, model_name, test_data_name=f"test_agg1_mean_q5_q95_q5_q95"):
+def test_xgb(model, model_name, test_data_name=f"test_agg1_mean_q5_q95_q5_q95"):
 
     test_data_dir = f"{test_data_name}.npz"
     test_data, labels, cat_indices = get_agg_data(data_dir=test_data_dir)
@@ -129,43 +99,44 @@ def test_lgbm(model, model_name, test_data_name=f"test_agg1_mean_q5_q95_q5_q95")
 
 @click.command()
 @click.option("--agg", default=1)
-@click.option("--n_workers", default=127)
+@click.option("--n_workers", default=3)
 def run_experiment(agg, n_workers):
     exp_name = f"train_agg{agg}_mean_q5_q95_q5_q95_data"
     params = {
-        'objective': 'binary',
-        'metric': "binary_logloss",
-        'boosting': 'dart',
+        'objective': 'binary:logistic',
+        #'metric': "binary_logloss",
+        #'eval_metric':'logloss',
+        'disable_default_eval_metric': 1,
         'seed': 42,
-        'num_leaves': 50,
         'learning_rate': 0.01,
-        'feature_fraction': 0.20,
-        'bagging_freq': 10,
-        'bagging_fraction': 0.50,
-        'n_jobs': n_workers,
-        'lambda_l2': 4,
-        'lambda_l1': 4,
-        'min_data_in_leaf': 40, 
+        'n_jobs': -1,
+        'colsample_bytree': 0.5,
+        'gamma':1.5,
+        'min_child_weight':8,
+        'lambda':70,
         'max_bin': 255,  # Deafult is 255
-
+        #'tree_method':'gpu_hist',
+        #'predictor':'gpu_predictor',
+        'max_depth':7, 
+        'subsample':0.88,
         }
     
     run_info = params
-    tempdir = tempfile.mkdtemp(prefix=f"pd_lgbm_{exp_name}_", dir=OUTDIR)
+    tempdir = tempfile.mkdtemp(prefix=f"pd_xgbm_{exp_name}_", dir=OUTDIR)
     with open(os.path.join(tempdir, "run_info.json"), "w") as fh:
         json.dump(run_info, fh, indent=4)   
 
     train_data, train_labels, cat_indices = get_agg_data(data_dir=f"train_agg{agg}_mean_q5_q95_q5_q95.npz")
     
-    model_name = f"lgbm13_agg{agg}"
+    model_name = f"xgbm13_agg{agg}"
     indices = get_customers_data_indices(num_data_points=[13], id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')
-    model = train_lgbm_cv(train_data, train_labels, indices, params, model_name=model_name, tempdir=tempdir, n_folds=5, seed=42)
+    model = train_xgb_cv(train_data, train_labels, indices, params, model_name=model_name, tempdir=tempdir, n_folds=5, seed=42)
 
-    model_name = f"lgbm_agg{agg}"
+    model_name = f"xgbm_agg{agg}"
     indices, _ = get_customers_data_indices(num_data_points=np.arange(14), id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')
-    model = train_lgbm_cv(train_data, train_labels, indices, params, model_name=model_name, tempdir=tempdir, n_folds=5, seed=42)
+    model = train_xgb_cv(train_data, train_labels, indices, params, model_name=model_name, tempdir=tempdir, n_folds=5, seed=42)
 
-    test_lgbm(model, model_name, test_data_name=f"test_agg{agg}_mean_q5_q95_q5_q95")
+    test_xgb(model, model_name, test_data_name=f"test_agg{agg}_mean_q5_q95_q5_q95")
 
 
 if __name__ == "__main__":

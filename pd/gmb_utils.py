@@ -41,6 +41,13 @@ def lgb_amex_metric(y_pred, y_true):
     return f'amex_metric gini {gini:.3f} recall {recall:.3f}', score, True
 
 
+def xgb_amex(y_pred, y_true):
+    y_true = y_true.get_label()
+    score, gini, recall = amex_metric(y_true, y_pred, return_components=True)
+    
+    #return f'gini_{int(gini*1e7)}_recall_{int(recall*1e7)}', score
+    return f'amex', score
+
 def train_lgbm(data, labels, params, feature=None, tempdir=None, n_folds=5, seed=42):
     
     oof_predictions = np.zeros(len(data))
