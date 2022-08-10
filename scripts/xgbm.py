@@ -96,7 +96,7 @@ def test_xgb(model, model_name, test_data_name=f"test_agg1_mean_q5_q95_q5_q95"):
     sub_file_dir = os.path.join(OUTDIR, f"{model_name}.csv")
     result.set_index("customer_ID").to_csv(sub_file_dir)
     
-    merge_with_pred(test_pred, indices_test=np.arange(len(test_pred)),
+    merge_with_pred(test_pred, np.arange(len(test_pred)),
                     model_name=model_name, type="test", id_dir=f'{test_data_name}_id.json')
     
 
@@ -133,11 +133,11 @@ def run_experiment(agg):
     model_name = f"xgbm13_agg{agg}"
     indices = get_customers_data_indices(num_data_points=[13], id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')
     model = train_xgb_cv(train_data, train_labels, indices, params, model_name=model_name, tempdir=tempdir, n_folds=5, seed=42)
+    test_xgb(model, model_name, test_data_name=f"test_agg{agg}_mean_q5_q95_q5_q95")
 
     model_name = f"xgbm_agg{agg}"
     indices = get_customers_data_indices(num_data_points=np.arange(14), id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')
     model = train_xgb_cv(train_data, train_labels, indices, params, model_name=model_name, tempdir=tempdir, n_folds=5, seed=42)
-
     test_xgb(model, model_name, test_data_name=f"test_agg{agg}_mean_q5_q95_q5_q95")
 
 

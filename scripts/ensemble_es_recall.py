@@ -101,6 +101,7 @@ def run_with_ray_send_data_to_worker(model_cls, population_size, num_cma_iterati
     training_history = []
     train_data = np.load(OUTDIR+"train_raw_all_data.npy")
     train_labels = np.load(OUTDIR+"train_raw_all_labels.npy")
+    
     X_train, X_test, y_train, y_test = train_test_split(train_data, train_labels, test_size=1/9, random_state=0, shuffle=True)
 
     train_dataset = CustomerData(X_train, train_labels=y_train)

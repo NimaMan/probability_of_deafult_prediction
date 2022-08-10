@@ -109,7 +109,7 @@ def test_conv(model, model_name, test_data_name=f"test_agg1_mean_q5_q95_q5_q95")
 
     test_data_dir = f"{test_data_name}.npz"
     test_data, labels, cat_indices = get_torch_agg_data(data_dir=test_data_dir)
-    test_pred = model.predict(test_data) # Predict the test set
+    test_pred = model(test_data) # Predict the test set
     del test_data
     gc.collect()
 
@@ -124,14 +124,13 @@ def test_conv(model, model_name, test_data_name=f"test_agg1_mean_q5_q95_q5_q95")
     sub_file_dir = os.path.join(OUTDIR, f"{model_name}.csv")
     result.set_index("customer_ID").to_csv(sub_file_dir)
     
-    merge_with_pred(test_pred, indices_test=np.arange(len(test_pred)),
+    merge_with_pred(test_pred, np.arange(len(test_pred)),
                     model_name=model_name, type="test", id_dir=f'{test_data_name}_id.json')
     
 
 @click.command()
 @click.option("--agg", default=1)
-@click.option("--n_workers", default=127)
-def run_experiment(agg, n_workers):
+def run_experiment(agg):
     exp_name = f"train_agg{agg}_mean_q5_q95_q5_q95_data"
     config = {"weight_decay": 0.01, "num_epochs": 50, "conv_channels": 32}
     model_name = f"conv{config['conv_channels']}_agg"

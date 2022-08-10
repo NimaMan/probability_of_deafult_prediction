@@ -89,7 +89,7 @@ def test_catb(model, model_name, test_data_name=f"test_agg1_mean_q5_q95_q5_q95")
     sub_file_dir = os.path.join(OUTDIR, f"{model_name}.csv")
     result.set_index("customer_ID").to_csv(sub_file_dir)
     
-    merge_with_pred(test_pred, indices_test=np.arange(len(test_pred)),
+    merge_with_pred(test_pred, np.arange(len(test_pred)),
                     model_name=model_name, type="test", id_dir=f'{test_data_name}_id.json')
     
 
