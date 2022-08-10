@@ -142,7 +142,7 @@ def run_experiment(agg, n_workers):
         'feature_fraction': 0.20,
         'bagging_freq': 10,
         'bagging_fraction': 0.50,
-        'n_jobs': n_workers,
+        'n_jobs': -1,
         'lambda_l2': 4,
         'lambda_l1': 4,
         'min_data_in_leaf': 40, 
@@ -162,7 +162,7 @@ def run_experiment(agg, n_workers):
     model = train_lgbm_cv(train_data, train_labels, indices, params, model_name=model_name, tempdir=tempdir, n_folds=5, seed=42)
 
     model_name = f"lgbm_agg{agg}"
-    indices, _ = get_customers_data_indices(num_data_points=np.arange(14), id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')
+    indices = get_customers_data_indices(num_data_points=np.arange(14), id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')
     model = train_lgbm_cv(train_data, train_labels, indices, params, model_name=model_name, tempdir=tempdir, n_folds=5, seed=42)
 
     test_lgbm(model, model_name, test_data_name=f"test_agg{agg}_mean_q5_q95_q5_q95")

@@ -34,6 +34,7 @@ def train_xgb_cv(data, labels, indices, params, model_name, tempdir=None, n_fold
         print(f'Training fold {fold} ...')
         x_train, x_val = data.iloc[used_indices].iloc[trn_ind], data.iloc[used_indices].iloc[val_ind]
         y_train, y_val = labels[used_indices][trn_ind], labels[used_indices][val_ind]
+        
         xgb_train = xgb.DMatrix(x_train, y_train, )
         xgb_valid = xgb.DMatrix(x_val, y_val, )
 
@@ -47,7 +48,7 @@ def train_xgb_cv(data, labels, indices, params, model_name, tempdir=None, n_fold
             verbose_eval = 100,
             feval = xgb_amex
             )
-        val_pred = model.predict(x_val) # Predict validation
+        val_pred = model.predict(xgb.DMatrix(x_val)) # Predict validation
         oof_predictions[val_ind] = val_pred  # Add to out of folds array
         
         # Compute fold metric
@@ -61,14 +62,15 @@ def train_xgb_cv(data, labels, indices, params, model_name, tempdir=None, n_fold
         merge_with_pred(val_pred, pred_indices, model_name=model_name)
     
         print(f'Our fold {fold} CV score is {score}')
-        del x_train, x_val, y_train, y_val, lgb_train, lgb_valid
+        del x_train, x_val, y_train, y_val, xgb_train, xgb_valid
         gc.collect()
-    score, gini, recall = metric.amex_metric(labels.reshape(-1, ), oof_predictions, return_components=True)  # Compute out of folds metric
+    score, gini, recall = metric.amex_metric(labels[used_indices].reshape(-1, ), oof_predictions, return_components=True)  # Compute out of folds metric
     print(f'Our out of folds CV score is {score}, Gini {gini}, recall {recall}')
     
     best_model = joblib.load(os.path.join(MODELDIR, best_model_name))
     if len(other_indices) > 0:
-        other_pred = best_model.predict(data.iloc[other_indices])
+        dx = xgb.DMatrix(data.iloc[other_indices])
+        other_pred = best_model.predict(dx)
         merge_with_pred(other_pred, other_indices, model_name=model_name)
     
     return best_model
@@ -78,6 +80,7 @@ def test_xgb(model, model_name, test_data_name=f"test_agg1_mean_q5_q95_q5_q95"):
 
     test_data_dir = f"{test_data_name}.npz"
     test_data, labels, cat_indices = get_agg_data(data_dir=test_data_dir)
+    test_data = xgb.DMatrix(test_data)
     test_pred = model.predict(test_data) # Predict the test set
     del test_data
     gc.collect()
@@ -99,8 +102,7 @@ def test_xgb(model, model_name, test_data_name=f"test_agg1_mean_q5_q95_q5_q95"):
 
 @click.command()
 @click.option("--agg", default=1)
-@click.option("--n_workers", default=3)
-def run_experiment(agg, n_workers):
+def run_experiment(agg):
     exp_name = f"train_agg{agg}_mean_q5_q95_q5_q95_data"
     params = {
         'objective': 'binary:logistic',
@@ -115,8 +117,8 @@ def run_experiment(agg, n_workers):
         'min_child_weight':8,
         'lambda':70,
         'max_bin': 255,  # Deafult is 255
-        #'tree_method':'gpu_hist',
-        #'predictor':'gpu_predictor',
+        'tree_method':'gpu_hist',
+        'predictor':'gpu_predictor',
         'max_depth':7, 
         'subsample':0.88,
         }
@@ -133,7 +135,7 @@ def run_experiment(agg, n_workers):
     model = train_xgb_cv(train_data, train_labels, indices, params, model_name=model_name, tempdir=tempdir, n_folds=5, seed=42)
 
     model_name = f"xgbm_agg{agg}"
-    indices, _ = get_customers_data_indices(num_data_points=np.arange(14), id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')
+    indices = get_customers_data_indices(num_data_points=np.arange(14), id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')
     model = train_xgb_cv(train_data, train_labels, indices, params, model_name=model_name, tempdir=tempdir, n_folds=5, seed=42)
 
     test_xgb(model, model_name, test_data_name=f"test_agg{agg}_mean_q5_q95_q5_q95")
