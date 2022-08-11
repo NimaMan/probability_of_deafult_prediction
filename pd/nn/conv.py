@@ -107,9 +107,7 @@ class ConvAgg(ESModule):
 
     def forward(self, cont, cat, return_featues=False):
 
-        print("stating")
         h = F.gelu(self.conv1(cont))
-        print("dd")
         r = self.n1(h)
         h = F.gelu(self.conv2(r))
         h = self.n2(h)

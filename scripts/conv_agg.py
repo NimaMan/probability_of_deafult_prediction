@@ -1,4 +1,3 @@
-#%%
 import os
 import gc
 import tempfile
@@ -19,9 +18,8 @@ from pd.utils import merge_with_pred, get_torch_agg_data, get_customers_data_ind
 from pd.params import *
 
 
-def train_conv_cv(cont_data, cat_data, labels, indices, config, splits, model_name, tempdir=None, n_folds=5, seed=42):
+def train_conv_cv(cont_data, cat_data, labels, indices, config, model_name, tempdir=None, n_folds=5, seed=42):
     used_indices, other_indices = indices
-    used_indices, other_indices = used_indices, other_indices
     print(f"training the {model_name}", config)
     oof_predictions = np.zeros(len(used_indices))
     best_model_name, best_model_score = "", 0
@@ -35,21 +33,24 @@ def train_conv_cv(cont_data, cat_data, labels, indices, config, splits, model_na
         model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), weight_decay=config["weight_decay"])
     criterion = torch.nn.BCELoss()
+
     kfold = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=seed)
-    for fold, (trn_ind, val_ind) in enumerate(splits):
+    for fold, (trn_ind, val_ind) in enumerate(kfold.split(used_indices, labels[used_indices])):
         print('-'*50)
         print(f'Training fold {fold} ...')
-        
-        x_cont_train, x_cont_val =cont_data[trn_ind], cont_data[val_ind]
+        x_cont_train, x_cont_val = cont_data[trn_ind], cont_data[val_ind]
         x_cat_train, x_cat_val = cat_data[trn_ind], cat_data[val_ind]
         y_train, y_val = labels[trn_ind], labels[val_ind]
-        sampler = BatchSampler(trn_ind, batch_size=BATCH_SIZE, drop_last=False)
+
+        batch_sampler_indices = np.arange(len(trn_ind))
+        np.random.shuffle(batch_sampler_indices)
+        sampler = BatchSampler(batch_sampler_indices, batch_size=BATCH_SIZE, drop_last=False, )
+        
         for epoch in range(config["num_epochs"]): 
             for idx, batch in enumerate(sampler):
                 cont_feat = torch.as_tensor(x_cont_train[batch], dtype=torch.float32).to(device)
                 cat_feat =  torch.as_tensor(x_cat_train[batch], dtype=torch.float32).to(device)
                 clabel =  torch.as_tensor(y_train[batch], dtype=torch.float32).to(device)
-                print("before model")
                 pred = model(cont_feat, cat_feat)
                 #weight = clabel.clone()
                 #weight[weight==0] = 4
@@ -59,13 +60,13 @@ def train_conv_cv(cont_data, cat_data, labels, indices, config, splits, model_na
                 loss.backward()
                 optimizer.step()
                 
-                model_metric, gini, recall = amex_metric(clabel.detach().numpy(), pred.detach().numpy(), return_components=True)
+                model_metric, gini, recall = amex_metric(clabel.cpu().detach().numpy(), pred.cpu().detach().numpy(), return_components=True)
                 val_metrix = 0
                 val_gini, val_recall = 0, 0
                 if model_metric > valThreshold:
                     cont_feat = x_cont_val.to(device)
                     cat_feat = x_cat_val.to(device)
-                    val_pred = model(cont_feat, cat_feat)
+                    val_pred = model(cont_feat, cat_feat).cpu().detach().numpy()
                     val_metrix, val_gini, val_recall = amex_metric(y_val, val_pred.detach().numpy(), return_components=True)
 
                 log_message = f"{epoch}, BCE loss: {loss.item():.3f},train -> amex {model_metric:.3f}, gini {gini:.3f}, recall {recall:.3f}, val -> amex {val_metrix:.3f} gini {val_gini:.3f}, recall {val_recall:.3f}"
@@ -74,7 +75,7 @@ def train_conv_cv(cont_data, cat_data, labels, indices, config, splits, model_na
         
         cont_feat = x_cont_val.to(device)
         cat_feat = x_cat_val.to(device)
-        val_pred = model(cont_feat, cat_feat)
+        val_pred = model(cont_feat, cat_feat).cpu().detach().numpy()
         oof_predictions[val_ind] = val_pred  # Add to out of folds array
         
         # Compute fold metric
@@ -88,7 +89,7 @@ def train_conv_cv(cont_data, cat_data, labels, indices, config, splits, model_na
         merge_with_pred(val_pred, pred_indices, model_name=model_name)
     
         print(f'Our fold {fold} CV score is {score}')
-        del x_train, x_val, y_train, y_val, lgb_train, lgb_valid
+        del x_cont_train, x_cat_train, y_train, y_val, x_cat_train, x_cat_val
         gc.collect()
     score, gini, recall = amex_metric(labels.reshape(-1, ), oof_predictions, return_components=True)  # Compute out of folds metric
     print(f'Our out of folds CV score is {score}, Gini {gini}, recall {recall}')
@@ -99,7 +100,7 @@ def train_conv_cv(cont_data, cat_data, labels, indices, config, splits, model_na
     if len(other_indices) > 0:
         cont_feat = cont_data[other_indices].to(device)
         cat_feat = x_cat_train[other_indices].to(device)
-        other_pred = model(cont_feat, cat_feat)
+        other_pred = model(cont_feat, cat_feat).cpu().detach().numpy()
         merge_with_pred(other_pred, other_indices, model_name=model_name)
     
     return model
@@ -142,16 +143,11 @@ def run_experiment(agg):
         json.dump(run_info, fh, indent=4)   
 
     cont_data, cat_data, train_labels = get_torch_agg_data(data_dir=f"train_agg{agg}_mean_q5_q95_q5_q95.npz")
-    splitter = StratifiedKFold(n_splits=4, shuffle=True, random_state=0)
-
+    
     
     model_name = f"conv13_agg{agg}"
     indices = get_customers_data_indices(num_data_points=[13], id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')
-    splits = []
-    for train_idx, test_idx in splitter.split(indices[0], train_labels[indices[0]]):
-        splits.append((torch.from_numpy(train_idx), torch.from_numpy(test_idx)))
-    
-    model = train_conv_cv(cont_data, cat_data, train_labels, indices, config, splits, model_name=model_name, tempdir=tempdir, n_folds=5, seed=42)
+    model = train_conv_cv(cont_data, cat_data, train_labels, indices, config, model_name=model_name, tempdir=tempdir, n_folds=5, seed=42)
 
     model_name = f"conv_agg{agg}"
     indices, _ = get_customers_data_indices(num_data_points=np.arange(14), id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')
