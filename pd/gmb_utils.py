@@ -11,6 +11,7 @@ from sklearn.model_selection import StratifiedKFold, train_test_split
 import lightgbm as lgb
 import pd.metric as metric
 from pd.params import *
+from pd.utils import get_pred_data
 
 
 def amex_metric(y_true, y_pred, return_components=False):
@@ -91,7 +92,7 @@ def train_lgbm(data, labels, params, feature=None, tempdir=None, n_folds=5, seed
     return (score, gini, recall)
 
 
-def get_agg_data(data_dir="train_agg_mean_q5_q95_q5_q95.npz"):
+def get_agg_data(data_dir="train_agg_mean_q5_q95_q5_q95.npz",  pred_feat=False, agg=1):
     d = np.load(OUTDIR+data_dir)
     #train_data = np.concatenate((d["d2"].astype(np.int32), d["d1"].reshape(d["d1"].shape[0], -1)), axis=1)
     train_labels = d["labels"]
@@ -100,5 +101,8 @@ def get_agg_data(data_dir="train_agg_mean_q5_q95_q5_q95.npz"):
     df = pd.concat((df2, df), axis=1,)
     df.columns = [f"c{i}" for i in range(df.shape[1])]
     cat_indices = list(np.arange(33))
-
+    if pred_feat:
+        pred_data = get_pred_data(type=data_dir.split("_")[0], id_dir=f'{data_dir.split(".")[0]}_id.json', agg=agg)
+        pred_cols = [f"p{i}" for i in range(pred_data.shape[1])]
+        df[pred_cols] = pred_data
     return df, train_labels, cat_indices

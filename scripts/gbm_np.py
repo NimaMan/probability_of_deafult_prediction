@@ -107,7 +107,7 @@ def train_lgbm_cv(data, labels, indices, params, model_name, tempdir=None, n_fol
 def test_lgbm(model, model_name, test_data_name=f"test_agg1_mean_q5_q95_q5_q95"):
 
     test_data_dir = f"{test_data_name}.npz"
-    test_data, labels, cat_indices = get_agg_data(data_dir=test_data_dir)
+    test_data, labels, cat_indices = get_agg_data(data_dir=test_data_name)
     test_pred = model.predict(test_data) # Predict the test set
     del test_data
     gc.collect()
@@ -131,6 +131,7 @@ def test_lgbm(model, model_name, test_data_name=f"test_agg1_mean_q5_q95_q5_q95")
 @click.option("--agg", default=1)
 @click.option("--n_workers", default=127)
 def run_experiment(agg, n_workers):
+    pred_feat = 1
     exp_name = f"train_agg{agg}_mean_q5_q95_q5_q95_data"
     params = {
         'objective': 'binary',
@@ -155,7 +156,7 @@ def run_experiment(agg, n_workers):
     with open(os.path.join(tempdir, "run_info.json"), "w") as fh:
         json.dump(run_info, fh, indent=4)   
 
-    train_data, train_labels, cat_indices = get_agg_data(data_dir=f"train_agg{agg}_mean_q5_q95_q5_q95.npz")
+    train_data, train_labels, cat_indices = get_agg_data(data_dir=f"train_agg{agg}_mean_q5_q95_q5_q95.npz", pred_feat=pred_feat, agg=agg)
     
     model_name = f"lgbm13_agg{agg}"
     indices = get_customers_data_indices(num_data_points=[13], id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')

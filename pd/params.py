@@ -5,7 +5,7 @@ import pickle
 from pathlib import Path
 import pandas as pd
 
-BATCH_SIZE = 20000
+BATCH_SIZE = 10000
 
 ## log 
 PerfThreshold = 0.84

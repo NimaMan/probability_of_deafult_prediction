@@ -4,6 +4,7 @@ import pickle
 import gzip 
 import torch
 import numpy as np
+import pandas as pd 
 from pd.params import *
 
 
@@ -86,3 +87,18 @@ def merge_with_pred(y_pred, y_indices, model_name, type="train", id_dir='train_a
     else:
         pred_file = pred_file.merge(result, how='left', on='customer_ID')
         pred_file.set_index("customer_ID").to_csv(pred_dir)
+
+def get_pred_data(type="train", id_dir='train_agg1_mean_q5_q95_q5_q95_id.json', agg=1):
+    if type == "train":
+        pred_dir = os.path.join(PREDDIR, "train_pred.csv")
+    else:
+        pred_dir = os.path.join(PREDDIR, "test_pred.csv")
+
+    pred_file = pd.read_csv(pred_dir, index_col=0)
+    indices = np.arange(len(pred_file))
+    customers = get_customers_id_from_indices(indices, id_dir=id_dir)
+    
+    cols  = [col for col in pred_file.columns if col not in ["customer_ID", "target"] and f"agg{agg}" not in col]
+    data = pred_file.loc[customers][cols].values
+
+    return data

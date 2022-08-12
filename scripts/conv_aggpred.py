@@ -13,12 +13,12 @@ import torch
 from torch.utils.data import Sampler, BatchSampler
 from pd.metric import amex_metric
 from pd.utils import write_log
-from pd.nn.conv import Conv, ConvAgg
-from pd.utils import merge_with_pred, get_torch_agg_data, get_customers_data_indices
+from pd.nn.conv import ConvPred
+from pd.utils import merge_with_pred, get_torch_agg_data, get_customers_data_indices, get_pred_data
 from pd.params import *
 
 
-def train_conv_cv(cont_data, cat_data, labels, indices, config, model_name, tempdir=None, n_folds=5, seed=42):
+def train_conv_cv(cont_data, cat_data, pred_data, labels, indices, config, model_name, tempdir=None, n_folds=5, seed=42):
     used_indices, other_indices = indices
     print(f"training the {model_name}", config)
     oof_predictions = np.zeros(len(used_indices))
@@ -28,7 +28,7 @@ def train_conv_cv(cont_data, cat_data, labels, indices, config, model_name, temp
     for fold, (trn_ind, val_ind) in enumerate(kfold.split(used_indices, labels[used_indices])):
         print('-'*50)
         print(f'Training fold {fold} ...')
-        model = ConvAgg(input_dim=cont_data.shape[-1], in_cat_dim=cat_data.shape[-1], conv_channels=config["conv_channels"])
+        model = ConvPred(input_dim=cont_data.shape[-1], in_cat_dim=cat_data.shape[-1], conv_channels=config["conv_channels"], pred_dim=pred_data.shape[-1])
         device = "cpu"
         if torch.cuda.is_available():
             device = "cuda:0"
@@ -42,6 +42,8 @@ def train_conv_cv(cont_data, cat_data, labels, indices, config, model_name, temp
         x_cat_train, x_cat_val = cat_data[used_indices][trn_ind], cat_data[used_indices][val_ind]
         y_train, y_val = labels[used_indices][trn_ind], labels[used_indices][val_ind]
 
+        x_pred_train, x_pred_val = pred_data[used_indices][trn_ind], pred_data[used_indices][val_ind]
+        
         batch_sampler_indices = np.arange(len(trn_ind))
         np.random.shuffle(batch_sampler_indices)
         sampler = BatchSampler(batch_sampler_indices, batch_size=BATCH_SIZE, drop_last=False, )
@@ -50,12 +52,13 @@ def train_conv_cv(cont_data, cat_data, labels, indices, config, model_name, temp
             for idx, batch in enumerate(sampler):
                 cont_feat = torch.as_tensor(x_cont_train[batch], dtype=torch.float32).to(device)
                 cat_feat =  torch.as_tensor(x_cat_train[batch], dtype=torch.float32).to(device)
+                pred_feat =  torch.as_tensor(x_pred_train[batch], dtype=torch.float32).to(device)
                 clabel =  torch.as_tensor(y_train[batch], dtype=torch.float32).to(device)
-                pred = model(cont_feat, cat_feat)
+                pred = model(cont_feat, cat_feat, pred_feat)
                 #weight = clabel.clone()
                 #weight[weight==0] = 4
                 #criterion.weight = weight
-                loss = criterion(pred, clabel.to(device))
+                loss = criterion(pred, clabel)
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
@@ -66,7 +69,9 @@ def train_conv_cv(cont_data, cat_data, labels, indices, config, model_name, temp
                 if model_metric > valThreshold:
                     cont_feat = torch.as_tensor(x_cont_val, dtype=torch.float32).to(device)
                     cat_feat = torch.as_tensor(x_cat_val, dtype=torch.float32).to(device)
-                    val_pred = model(cont_feat, cat_feat).cpu().detach().numpy()
+                    pred_feat =  torch.as_tensor(x_pred_val, dtype=torch.float32).to(device)
+
+                    val_pred = model(cont_feat, cat_feat, pred_feat).cpu().detach().numpy()
                     val_metrix, val_gini, val_recall = amex_metric(y_val, val_pred, return_components=True)
 
                 log_message = f"{epoch}, BCE loss: {loss.item():.3f},train -> amex {model_metric:.3f}, gini {gini:.3f}, recall {recall:.3f}, val -> amex {val_metrix:.3f} gini {val_gini:.3f}, recall {val_recall:.3f}"
@@ -75,7 +80,8 @@ def train_conv_cv(cont_data, cat_data, labels, indices, config, model_name, temp
         
         cont_feat = torch.as_tensor(x_cont_val, dtype=torch.float32).to(device)
         cat_feat = torch.as_tensor(x_cat_val, dtype=torch.float32).to(device)
-        val_pred = model(cont_feat, cat_feat).cpu().detach().numpy().reshape(-1, )
+        pred_feat =  torch.as_tensor(x_pred_val, dtype=torch.float32).to(device)
+        val_pred = model(cont_feat, cat_feat, pred_feat).cpu().detach().numpy().reshape(-1, )
         oof_predictions[val_ind] = val_pred  # Add to out of folds array
         
         del x_cont_train, x_cat_train, y_train
@@ -104,7 +110,9 @@ def train_conv_cv(cont_data, cat_data, labels, indices, config, model_name, temp
     if len(other_indices) > 0:
         cont_feat = torch.as_tensor(cont_data[other_indices], dtype=torch.float32).to(device)
         cat_feat = torch.as_tensor(cat_data[other_indices], dtype=torch.float32).to(device)
-        other_pred = model(cont_feat, cat_feat).cpu().detach().numpy()
+        pred_feat = torch.as_tensor(pred_data[other_indices], dtype=torch.float32).to(device)
+        
+        other_pred = model(cont_feat, cat_feat, pred_feat).cpu().detach().numpy()
         merge_with_pred(other_pred, other_indices, model_name=model_name)
     
     return model
@@ -136,25 +144,27 @@ def test_conv(model, model_name, test_data_name=f"test_agg1_mean_q5_q95_q5_q95")
 @click.command()
 @click.option("--agg", default=1)
 def run_experiment(agg):
-    exp_name = f"train_agg{agg}_mean_q5_q95_q5_q95_data"
+    exp_name = f"train_pred{agg}_mean_q5_q95_q5_q95_data"
     config = {"weight_decay": 0.01, "num_epochs": 50, "conv_channels": 32}
-    model_name = f"conv{config['conv_channels']}_agg"
+    model_name = f"conv{config['conv_channels']}_pred"
 
     
     run_info = config
-    tempdir = tempfile.mkdtemp(prefix=f"pd_torch_{exp_name}_", dir=OUTDIR)
+    tempdir = tempfile.mkdtemp(prefix=f"pd_torch_pred1_{exp_name}_", dir=OUTDIR)
     with open(os.path.join(tempdir, "run_info.json"), "w") as fh:
         json.dump(run_info, fh, indent=4)   
 
     cont_data, cat_data, train_labels = get_torch_agg_data(data_dir=f"train_agg{agg}_mean_q5_q95_q5_q95.npz")
+    pred_data = get_pred_data(type="train", id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')
     
-    #model_name = f"conv13_agg{agg}"
+    
+    #model_name = f"conv13_pred{agg}"
     #indices = get_customers_data_indices(num_data_points=[13], id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')
-    #model = train_conv_cv(cont_data, cat_data, train_labels, indices, config, model_name=model_name, tempdir=tempdir, n_folds=5, seed=42)
+    #model = train_conv_cv(cont_data, cat_data, pred_data, train_labels, indices, config, model_name=model_name, tempdir=tempdir, n_folds=5, seed=42)
 
-    model_name = f"conv_agg{agg}"
+    model_name = f"conv_pred{agg}"
     indices = get_customers_data_indices(num_data_points=np.arange(14), id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')
-    model = train_conv_cv(cont_data, cat_data, train_labels, indices, config, model_name=model_name, tempdir=tempdir, n_folds=5, seed=42)
+    model = train_conv_cv(cont_data, cat_data, pred_data, train_labels, indices, config, model_name=model_name, tempdir=tempdir, n_folds=5, seed=42)
 
     #test_conv(model, model_name, test_data_name=f"test_agg{agg}_mean_q5_q95_q5_q95")
 
