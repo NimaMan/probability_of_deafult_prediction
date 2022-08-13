@@ -1,6 +1,6 @@
 # Simdi
 
-- Finish the lgbm and xgb models 
+- Looking into error of possible different agg models for ensemble purposes
 
 - main thing that works: training and testing on the 13 data! 
  - Possible questions that it brings 
@@ -27,17 +27,11 @@
     
     -  possibly come up with a distribution of Weak learners sampling from the dist of sinfle factor analysis
 
-
 - Different precisons from the official pytorch 
 
-## Categorical data
-    Transform the categorical data
-    - Later pay speacial attention to the B_38
-### Olan
--  I have a convolutional model that works pretty good for the C13
-
+### Bilinenler
+- I have a convolutional model that works pretty good for the C13
 - I know that recall is the main bottleneck in its error metric
-
 - I have started training weak models. -> a possible path is to train so many weak models give it to a ensemble learner that inegrates the preds 
 
 ## Roadmap
@@ -48,13 +42,10 @@
 - evaluate errors
 - later propogate the results into the rest of the dataset
 
-- Add the predictions from other models to the features that you have. 
+- Add the predictions from other models to the features that you have. Initial attmepts with XGB did not perform the best!
+This is the way to go.. 
 
 - Investigate ranked probabilities
-
-# Ensemble
-Will come up with a couple of ensemble models. 
-    - Add the predictions of lgbm and xgb as a feature to conv
 
 
 
@@ -70,6 +61,7 @@ Will come up with a couple of ensemble models.
 
 ## FE 
 
+Main finding here: Different features result in a different complementary predictions 
 
 
 ## Models 
@@ -84,4 +76,7 @@ Will come up with a couple of ensemble models.
 
 ## Ensemble
 
+How do we combine all the predictions (that are complementory into each other) into a final prediction
+
+How do we add a prediction from one model into the other for complementory predictions?
 

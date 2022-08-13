@@ -19,7 +19,7 @@ from pd.params import *
 from pd.gmb_utils import get_agg_data, xgb_amex
 
 
-def train_xgb_cv(data, labels, indices, params, model_name, tempdir=None, n_folds=5, seed=42):
+def train_xgb_cv(data, labels, indices, params, model_name, id_dir=None, n_folds=5, seed=42):
     """
     take the data in certain indices [for example c13 data]
     """
@@ -59,7 +59,7 @@ def train_xgb_cv(data, labels, indices, params, model_name, tempdir=None, n_fold
             best_model_score = score
 
         pred_indices = used_indices[val_ind]
-        merge_with_pred(val_pred, pred_indices, model_name=model_name)
+        merge_with_pred(val_pred, pred_indices, model_name=model_name, id_dir=id_dir)
     
         print(f'Our fold {fold} CV score is {score}')
         del x_train, x_val, y_train, y_val, xgb_train, xgb_valid
@@ -71,7 +71,7 @@ def train_xgb_cv(data, labels, indices, params, model_name, tempdir=None, n_fold
     if len(other_indices) > 0:
         dx = xgb.DMatrix(data.iloc[other_indices])
         other_pred = best_model.predict(dx)
-        merge_with_pred(other_pred, other_indices, model_name=model_name)
+        merge_with_pred(other_pred, other_indices, model_name=model_name, id_dir=id_dir)
     
     return best_model
 
@@ -103,7 +103,7 @@ def test_xgb(model, model_name, test_data_name=f"test_agg1_mean_q5_q95_q5_q95", 
 @click.command()
 @click.option("--agg", default=1)
 def run_experiment(agg):
-    pred_feat = 1
+    pred_feat = 0
     exp_name = f"train_agg{agg}_mean_q5_q95_q5_q95_data"
     params = {
         'objective': 'binary:logistic',
@@ -124,21 +124,22 @@ def run_experiment(agg):
         'subsample':0.88,
         }
     
+    id_dir = f"train_agg{agg}_mean_q5_q95_q5_q95_id.json"
     run_info = params
-    tempdir = tempfile.mkdtemp(prefix=f"pd_xgbm_p{pred_feat}_{exp_name}_", dir=OUTDIR)
-    with open(os.path.join(tempdir, "run_info.json"), "w") as fh:
-        json.dump(run_info, fh, indent=4)   
+    #tempdir = tempfile.mkdtemp(prefix=f"pd_xgbm_p{pred_feat}_{exp_name}_", dir=OUTDIR)
+    #with open(os.path.join(tempdir, "run_info.json"), "w") as fh:
+    #    json.dump(run_info, fh, indent=4)   
 
     train_data, train_labels, cat_indices = get_agg_data(data_dir=f"train_agg{agg}_mean_q5_q95_q5_q95.npz", pred_feat=pred_feat, agg=agg)
     
-    #model_name = f"xgbm13_p{pred_feat}_agg{agg}"
-    #indices = get_customers_data_indices(num_data_points=[13], id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')
-    #model = train_xgb_cv(train_data, train_labels, indices, params, model_name=model_name, tempdir=tempdir, n_folds=5, seed=42)
-    #test_xgb(model, model_name, test_data_name=f"test_agg{agg}_mean_q5_q95_q5_q95", pred_feat=pred_feat)
+    model_name = f"xgbm13_p{pred_feat}_agg{agg}"
+    indices = get_customers_data_indices(num_data_points=[13], id_dir=id_dir)
+    model = train_xgb_cv(train_data, train_labels, indices, params, model_name=model_name, id_dir=id_dir, n_folds=5, seed=42)
+    test_xgb(model, model_name, test_data_name=f"test_agg{agg}_mean_q5_q95_q5_q95", pred_feat=pred_feat)
 
     model_name = f"xgbm_p{pred_feat}_agg{agg}"
     indices = get_customers_data_indices(num_data_points=np.arange(14), id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')
-    model = train_xgb_cv(train_data, train_labels, indices, params, model_name=model_name, tempdir=tempdir, n_folds=5, seed=42)
+    model = train_xgb_cv(train_data, train_labels, indices, params, model_name=model_name, id_dir=id_dir, n_folds=5, seed=42)
     #test_xgb(model, model_name, test_data_name=f"test_agg{agg}_mean_q5_q95_q5_q95", pred_feat=pred_feat)
 
 

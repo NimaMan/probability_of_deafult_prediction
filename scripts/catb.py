@@ -19,7 +19,7 @@ from pd.params import *
 from pd.gmb_utils import get_agg_data, xgb_amex
 
 
-def train_catb_cv(data, labels, indices, params, model_name, tempdir=None, n_folds=5, seed=42):
+def train_catb_cv(data, labels, indices, params, model_name, id_dir=None, n_folds=5, seed=42):
     """
     take the data in certain indices [for example c13 data]
     """
@@ -54,7 +54,7 @@ def train_catb_cv(data, labels, indices, params, model_name, tempdir=None, n_fol
             best_model_score = score
 
         pred_indices = used_indices[val_ind]
-        merge_with_pred(val_pred, pred_indices, model_name=model_name)
+        merge_with_pred(val_pred, pred_indices, model_name=model_name, id_dir=id_dir)
     
         print(f'Our fold {fold} CV score is {score}')
         del x_train, x_val, y_train, y_val
@@ -65,7 +65,7 @@ def train_catb_cv(data, labels, indices, params, model_name, tempdir=None, n_fol
     best_model = joblib.load(os.path.join(MODELDIR, best_model_name))
     if len(other_indices) > 0:
         other_pred = best_model.predict_proba(data.iloc[other_indices])[:, 1]
-        merge_with_pred(other_pred, other_indices, model_name=model_name)
+        merge_with_pred(other_pred, other_indices, model_name=model_name, id_dir=id_dir)
     
     return best_model
 
@@ -101,20 +101,21 @@ def run_experiment(agg):
         "device": "GPU"
         }
     
+    id_dir = f"train_agg{agg}_mean_q5_q95_q5_q95_id.json"
     run_info = params
-    tempdir = tempfile.mkdtemp(prefix=f"pd_catb_{exp_name}_", dir=OUTDIR)
-    with open(os.path.join(tempdir, "run_info.json"), "w") as fh:
-        json.dump(run_info, fh, indent=4)   
+    #tempdir = tempfile.mkdtemp(prefix=f"pd_catb_{exp_name}_", dir=OUTDIR)
+    #with open(os.path.join(tempdir, "run_info.json"), "w") as fh:
+    #    json.dump(run_info, fh, indent=4)   
 
     train_data, train_labels, cat_indices = get_agg_data(data_dir=f"train_agg{agg}_mean_q5_q95_q5_q95.npz")
     
     model_name = f"catb13_agg{agg}"
     indices = get_customers_data_indices(num_data_points=[13], id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')
-    model = train_catb_cv(train_data, train_labels, indices, params, model_name=model_name, tempdir=tempdir, n_folds=5, seed=42)
+    model = train_catb_cv(train_data, train_labels, indices, params, model_name=model_name, id_dir=id_dir, n_folds=5, seed=42)
 
     model_name = f"catb_agg{agg}"
     indices = get_customers_data_indices(num_data_points=np.arange(14), id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')
-    model = train_catb_cv(train_data, train_labels, indices, params, model_name=model_name, tempdir=tempdir, n_folds=5, seed=42)
+    model = train_catb_cv(train_data, train_labels, indices, params, model_name=model_name, id_dir=id_dir, n_folds=5, seed=42)
 
     test_catb(model, model_name, test_data_name=f"test_agg{agg}_mean_q5_q95_q5_q95")
 
