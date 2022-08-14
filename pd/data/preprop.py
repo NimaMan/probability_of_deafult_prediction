@@ -194,11 +194,6 @@ def preprocess_data(data_type="train", feat_type="raw_all", time_dim=13, all_dat
                                                                 fillna=fillna, borders=borders, normalizer=normalizer,)
     else:
         raise NotImplementedError
-    #if time_dim is not None:
-    #    if data_type == "train":
-    #        np.save(OUTDIR+f"{output_file_name}_{feat_type}_{fillna}_{borders[0]}_{borders[1]}_labels.npy", labels_array)
-    #    np.save(OUTDIR+f"{output_file_name}_{feat_type}_{fillna}_{borders[0]}_{borders[1]}_data.npy", data)        
-    #else:
     output_file_name = output_file_name + f"_{normalizer}"
     try:
         if data_type == "train":

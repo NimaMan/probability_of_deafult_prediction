@@ -12,7 +12,7 @@ import torch.nn
 from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
 
-from pd.nn.model import Conv
+from pd.nn.conv import Conv
 from pd.data.loader import CustomerData, DTwithLabelRatio
 from pd.nn.train_utils import train_torch_model
 from pd.metric import amex_metric
