@@ -100,6 +100,6 @@ def get_pred_data(id_dir, type="train", agg=1):
     customers = get_customers_id_from_indices(indices, id_dir=id_dir)
     
     cols  = [col for col in pred_file.columns if col not in ["customer_ID", "target"]]
-    data = pred_file.loc[customers][cols].values
+    data = pred_file.loc[customers][cols].values.astype(np.float32)
 
     return data

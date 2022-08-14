@@ -165,7 +165,7 @@ class ConvPred(ESModule):
         self.cat_nf2 = nn.LayerNorm([hidden_dim])
         
 
-        self.fc1 = nn.Linear(in_features=(conv_channels*input_dim + hidden_dim), out_features=hidden_dim)
+        self.fc1 = nn.Linear(in_features=(input_dim + hidden_dim), out_features=hidden_dim)
         self.nf1 = nn.LayerNorm([hidden_dim])
         self.fc2 = nn.Linear(in_features=hidden_dim, out_features=hidden_dim)
         self.nf2 = nn.LayerNorm([hidden_dim])
@@ -184,14 +184,16 @@ class ConvPred(ESModule):
         h = F.gelu(self.conv3(h))
         h = self.n3(h+r)
         
+        print("h")
         # cat vars 
         h_cat = F.gelu(self.cat_fc1(cat))
         h_cat = self.nf1(h_cat)
         h_cat = F.gelu(self.fc2(h_cat))
         h_cat = self.nf2(h_cat)
-         
-        #h = torch.mean(h, axis=1,)
-        h = h.view(-1, self.conv_chanels*self.input_dim)
+        print("h2")
+
+        h = torch.mean(h, axis=1,)
+        #h = h.view(-1, self.conv_chanels*self.input_dim)
         h = torch.cat((h, h_cat), dim=-1)
         h = F.gelu(self.fc1(h))
         r = self.nf1(h)
