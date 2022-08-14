@@ -43,7 +43,7 @@ def get_torch_agg_data(data_dir="train_agg_mean_q5_q95_q5_q95.npz"):
     return cont_vars, cat_vars, train_labels
 
 
-def get_customers_data_indices(num_data_points=[13], id_dir='train_agg1_mean_q5_q95_q5_q95_id.json'):
+def get_customers_data_indices(id_dir, num_data_points=[13]):
     import json 
     with open(OUTDIR+id_dir, 'r') as f:
             train_id_dict = json.load(f)
@@ -60,7 +60,7 @@ def get_customers_data_indices(num_data_points=[13], id_dir='train_agg1_mean_q5_
     return np.array(wanted_indices), np.array(other_indices)
 
 
-def get_customers_id_from_indices(indices, id_dir='train_agg1_mean_q5_q95_q5_q95_id.json'):
+def get_customers_id_from_indices(indices, id_dir):
     import json 
     with open(OUTDIR+id_dir, 'r') as f:
             id_dict = json.load(f)
@@ -69,7 +69,7 @@ def get_customers_id_from_indices(indices, id_dir='train_agg1_mean_q5_q95_q5_q95
     return customers
 
 
-def merge_with_pred(y_pred, y_indices, model_name, type="train", id_dir='train_agg1_mean_q5_q95_q5_q95_id.json'):
+def merge_with_pred(y_pred, y_indices, model_name, id_dir, type="train"):
     if type == "train":
         pred_dir = os.path.join(PREDDIR, "train_pred.csv")
     else:
@@ -77,18 +77,19 @@ def merge_with_pred(y_pred, y_indices, model_name, type="train", id_dir='train_a
 
     pred_file = pd.read_csv(pred_dir, index_col=0)
     customers = get_customers_id_from_indices(y_indices, id_dir=id_dir)
-    result = pd.DataFrame({"customer_ID": customers, 
-                        model_name: y_pred.reshape(-1)
-                        })
-
+    
     if model_name in pred_file.columns:
-        pred_file[model_name].loc[customers] = result.set_index("customer_ID").loc[customers].values.reshape(-1)
+        pred_file[model_name].loc[customers] = y_pred.reshape(-1)
         pred_file.to_csv(pred_dir)
     else:
+        result = pd.DataFrame({"customer_ID": customers, 
+                        model_name: y_pred.reshape(-1)
+                        })
         pred_file = pred_file.merge(result, how='left', on='customer_ID')
         pred_file.set_index("customer_ID").to_csv(pred_dir)
 
-def get_pred_data(type="train", id_dir='train_agg1_mean_q5_q95_q5_q95_id.json', agg=1):
+
+def get_pred_data(id_dir, type="train", agg=1):
     if type == "train":
         pred_dir = os.path.join(PREDDIR, "train_pred.csv")
     else:
@@ -98,7 +99,7 @@ def get_pred_data(type="train", id_dir='train_agg1_mean_q5_q95_q5_q95_id.json', 
     indices = np.arange(len(pred_file))
     customers = get_customers_id_from_indices(indices, id_dir=id_dir)
     
-    cols  = [col for col in pred_file.columns if col not in ["customer_ID", "target"] and f"agg{agg}" not in col]
+    cols  = [col for col in pred_file.columns if col not in ["customer_ID", "target"]]
     data = pred_file.loc[customers][cols].values
 
     return data

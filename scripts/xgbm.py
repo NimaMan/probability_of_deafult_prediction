@@ -111,17 +111,17 @@ def run_experiment(agg):
         #'eval_metric':'logloss',
         'disable_default_eval_metric': 1,
         'seed': 42,
-        'learning_rate': 0.01,
+        'learning_rate': 0.05,
         'n_jobs': -1,
-        'colsample_bytree': 0.5,
+        'colsample_bytree': 0.6,
         'gamma':1.5,
         'min_child_weight':8,
         'lambda':70,
         'max_bin': 255,  # Deafult is 255
         'tree_method':'gpu_hist',
         'predictor':'gpu_predictor',
-        'max_depth':6, 
-        'subsample':0.88,
+        'max_depth': 4, 
+        'subsample': 0.8,
         }
     
     id_dir = f"train_agg{agg}_mean_q5_q95_q5_q95_id.json"
@@ -132,15 +132,15 @@ def run_experiment(agg):
 
     train_data, train_labels, cat_indices = get_agg_data(data_dir=f"train_agg{agg}_mean_q5_q95_q5_q95.npz", pred_feat=pred_feat, agg=agg)
     
-    model_name = f"xgbm13_p{pred_feat}_agg{agg}"
+    model_name = f"xgbmv213_p{pred_feat}_agg{agg}"
     indices = get_customers_data_indices(num_data_points=[13], id_dir=id_dir)
     model = train_xgb_cv(train_data, train_labels, indices, params, model_name=model_name, id_dir=id_dir, n_folds=5, seed=42)
     test_xgb(model, model_name, test_data_name=f"test_agg{agg}_mean_q5_q95_q5_q95", pred_feat=pred_feat)
 
-    model_name = f"xgbm_p{pred_feat}_agg{agg}"
-    indices = get_customers_data_indices(num_data_points=np.arange(14), id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')
+    model_name = f"xgbmv2_p{pred_feat}_agg{agg}"
+    indices = get_customers_data_indices(num_data_points=np.arange(14), id_dir=id_dir)
     model = train_xgb_cv(train_data, train_labels, indices, params, model_name=model_name, id_dir=id_dir, n_folds=5, seed=42)
-    #test_xgb(model, model_name, test_data_name=f"test_agg{agg}_mean_q5_q95_q5_q95", pred_feat=pred_feat)
+    test_xgb(model, model_name, test_data_name=f"test_agg{agg}_mean_q5_q95_q5_q95", pred_feat=pred_feat)
 
 
 if __name__ == "__main__":
