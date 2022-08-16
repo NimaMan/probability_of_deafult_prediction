@@ -8,9 +8,9 @@ import pandas as pd
 BATCH_SIZE = 5000
 
 ## log 
-PerfThreshold = 0.84
+PerfThreshold = 0.797
 valThreshold = 0.795
-logBestIndiv = 20
+logBestIndiv = 200
 
 
 # dirs

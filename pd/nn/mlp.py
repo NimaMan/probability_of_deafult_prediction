@@ -37,3 +37,14 @@ class MLP(ESModule):
             h = layer(h)
             h = self.activation(h)
         return torch.sigmoid(self.layers[-1](h))
+
+
+class Linear(ESModule):
+
+    def __init__(self, input_dim ):
+        super(Linear, self).__init__()
+        self.input_dim = input_dim
+        self.layer = nn.Linear(self.input_dim, 1)
+
+    def forward(self, h):
+        return torch.sigmoid(self.layer(h))
