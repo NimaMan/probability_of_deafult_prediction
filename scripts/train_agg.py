@@ -6,7 +6,7 @@ import torch
 import torch.nn 
 import matplotlib.pyplot as plt
 import warnings
-from pd.nn.model import Conv
+from pd.nn.conv import Conv
 
 from pd.metric import amex_metric
 from pd.data.loader import CustomerData, DataLoader

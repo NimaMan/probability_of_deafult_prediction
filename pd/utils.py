@@ -89,6 +89,17 @@ def merge_with_pred(y_pred, y_indices, model_name, id_dir, type="train"):
         pred_file.set_index("customer_ID").to_csv(pred_dir)
 
 
+def merge_with_pred_df(pred_df, type="train"):
+    if type == "train":
+        pred_dir = os.path.join(PREDDIR, "train_pred.csv")
+    else:
+        pred_dir = os.path.join(PREDDIR, "test_pred.csv")
+
+    pred_file = pd.read_csv(pred_dir)
+    pred_file = pred_file.merge(pred_df, how='left', on='customer_ID')
+    pred_file.set_index("customer_ID").to_csv(pred_dir)
+
+
 def get_pred_data(id_dir, type="train", agg=1):
     if type == "train":
         pred_dir = os.path.join(PREDDIR, "train_pred.csv")
