@@ -166,8 +166,10 @@ class ConvPred(ESModule):
         self.fc3 = nn.Linear(in_features=hidden_dim, out_features=hidden_dim)
         self.nf3 = nn.LayerNorm([hidden_dim])
         
-        self.fcpred = nn.Linear(in_features=pred_dim, out_features=pred_dim)
-        self.fcout = nn.Linear(in_features=hidden_dim+pred_dim, out_features=1)
+        self.fcpred = nn.Linear(in_features=pred_dim, out_features=hidden_dim)
+        self.convout = nn.Conv1d(in_channels=2, out_channels=conv_channels, kernel_size=2,)
+
+        self.fcout = nn.Linear(in_features=hidden_dim, out_features=1)
 
     def forward(self, cont, pred, return_featues=False):
 
@@ -188,7 +190,9 @@ class ConvPred(ESModule):
         h = self.nf3(h+r)
         
         pred = F.gelu(self.fcpred(pred))
-        h = torch.cat((h, pred), dim=1)
+        h = torch.cat((h.unsqueeze(1), pred.unsqueeze(1)), dim=1)
+        h = torch.mean(h, axis=1,)
+        
         if return_featues:
             return torch.sigmoid(self.fcout(h)), h
         

@@ -22,25 +22,6 @@ from pd.nn.recall_models import MLP, MLPAtt
 from torch.utils.data import Dataset, DataLoader
 
 
-class CustomerData(Dataset):
-    def __init__(self, data:np.array, test_mode=False, train_labels=None):
-        self.data = data
-        self.test_mode = test_mode
-        self.train_labels = train_labels
-        
-    def __len__(self):
-        return len(self.train_labels)
-
-    def __getitem__(self, index):        
-        feat =  torch.from_numpy(self.data[index]).float()
-
-        if self.test_mode:
-            return feat, index
-        else:
-            customer_label = torch.as_tensor(self.train_labels[index])
-            return feat, customer_label
-
-
 @ray.remote
 def worker_with_batch(model, weights, feat, labels):
     model.eval()
@@ -49,8 +30,8 @@ def worker_with_batch(model, weights, feat, labels):
         pred = model(feat)
         reward, gini, recall = amex_metric(labels, pred.detach().numpy(), return_components=True)
 
-        return reward
-        #return recall
+        #return reward
+        return recall
 
 
 def get_candidate_rewards_batch_data(candidates, model, feat, labels):
@@ -82,19 +63,23 @@ def run_with_ray_send_data_to_worker(population_size, num_cma_iterations, tempdi
     training_history = []
     train_data = pd.read_csv(PREDDIR+"train_pred.csv", index_col=0)
     train_labels = train_data["target"].values
-    train_data = train_data.drop("target", axis=1).values
+    train_data["STD"] = train_data.apply(np.std, axis=1)
+    train_data["STD"] = train_data["STD"]/train_data["STD"].max()
+    #train_data = train_data.drop("target", axis=1)
+    cols  = [col for col in train_data.columns if col != "target"]
     X_train, X_test, y_train, y_test = train_test_split(train_data, train_labels, test_size=1/9, random_state=0, shuffle=True)
 
-    train_dataset = CustomerData(X_train, train_labels=y_train)
-    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE)
+    #train_dataset = CustomerData(X_train, train_labels=y_train)
+    #train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE)
     validation_data = (X_test, y_test)
     
+    input_dim = X_train.shape[1] - 1
     if model_name == "Linear":
-        model = Linear(X_train.shape[1])
+        model = Linear(input_dim)
     elif model_name == "Att":
-        model = MLPAtt(X_train.shape[1])
+        model = MLPAtt(input_dim)
     else:
-        model = Linear(X_train.shape[1])
+        model = MLP(input_dim)
 
     if train_method == "cma":
         es = CMAES(model.num_params, popsize=population_size, sigma_init=5)
@@ -102,33 +87,36 @@ def run_with_ray_send_data_to_worker(population_size, num_cma_iterations, tempdi
         es = BES(model, popsize=population_size, init_params=None, max_block_width=1000, sigma_init=5)
 
     for cma_iteration in range(1, num_cma_iterations+1):
-        for feat, labels in train_loader:
-            candidates = es.ask()
-            rewards = get_candidate_rewards_batch_data(candidates, model, feat, labels)
-            training_history.append(np.array(rewards))
-            h = f"episode: {int(cma_iteration)}, best reward {np.max(rewards)} median {np.median(rewards)} mean {np.mean(rewards)}," \
-                f" std {np.std(rewards) },\n"
-            with open(os.path.join(tempdir, "progress.txt"), "a") as fh:
-                fh.write(h)
-            best_idx = np.argmax(rewards)
-            best_weights = candidates[best_idx]
-            best_reward = rewards[best_idx]
-            if best_reward > PerfThreshold:
-                    model.set_model_params(best_weights)
-                    val_features = torch.from_numpy(X_test).float()
-                    val_pred = model(val_features)
-                    val_metrix = amex_metric(y_test, val_pred.detach().numpy(), return_components=True)
-                    print("The val ", val_metrix)
-                    np.save(os.path.join(tempdir, f"best_iteration_{cma_iteration:04d}.npy"), best_weights)
-                
-            es.tell(rewards)
+        #for feat, labels in train_loader:
+        batch_data = train_data.sample(BATCH_SIZE, weights="STD")
+        labels = batch_data["target"].values
+        batch_data = torch.from_numpy(batch_data[cols].values).float()
+        candidates = es.ask()
+        rewards = get_candidate_rewards_batch_data(candidates, model, batch_data, labels)
+        training_history.append(np.array(rewards))
+        h = f"episode: {int(cma_iteration)}, best reward {np.max(rewards)} median {np.median(rewards)} mean {np.mean(rewards)}," \
+            f" std {np.std(rewards) },\n"
+        with open(os.path.join(tempdir, "progress.txt"), "a") as fh:
+            fh.write(h)
+        best_idx = np.argmax(rewards)
+        best_weights = candidates[best_idx]
+        best_reward = rewards[best_idx]
+        if best_reward > PerfThreshold:
+                model.set_model_params(best_weights)
+                val_features = torch.from_numpy(X_test[cols].values).float()
+                val_pred = model(val_features)
+                val_metrix = amex_metric(y_test, val_pred.detach().numpy(), return_components=True)
+                print("The val ", val_metrix)
+                np.save(os.path.join(tempdir, f"best_iteration_{cma_iteration:04d}.npy"), best_weights)
+            
+        es.tell(rewards)
 
 
 #"""
 @click.command()
-@click.option("--population-size", default=1000, type=int)
-@click.option("--num_cma_iters", default=2500, type=int)
-@click.option("--n_workers", default=3)
+@click.option("--population-size", default=254, type=int)
+@click.option("--num_cma_iters", default=5000, type=int)
+@click.option("--n_workers", default=127)
 @click.option("--model_name", default="Linear")
 def run_experiment(population_size, num_cma_iters, n_workers, model_name):
 
@@ -138,7 +126,7 @@ def run_experiment(population_size, num_cma_iters, n_workers, model_name):
         init_model_name=model_name
     )
 
-    tempdir = tempfile.mkdtemp(prefix="pd_recall_", dir=OUTDIR)
+    tempdir = tempfile.mkdtemp(prefix="pd_pred_std_sample_recall_", dir=OUTDIR)
     with open(os.path.join(tempdir, "run_info.json"), "w") as fh:
         json.dump(run_info, fh, indent=4)
 

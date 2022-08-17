@@ -90,10 +90,10 @@ def train_conv_cv(cont_data, pred_data, labels, indices, config, model_name, tem
             best_model_score = score
 
         pred_indices = used_indices[val_ind]
-        merge_with_pred(val_pred, pred_indices, model_name=model_name)
+        merge_with_pred(val_pred, pred_indices, model_name=model_name, id_dir=f'train_logistic_raw_all_mean_q5_q95_q5_q95_id.json')
     
         print(f'Our fold {fold} CV score is {score}')
-        del y_val, x_cont_val, x_cat_val, model
+        del y_val, x_cont_val, model
         gc.collect()
         torch.cuda.empty_cache()
     score, gini, recall = amex_metric(labels[used_indices].reshape(-1, ), oof_predictions, return_components=True)  # Compute out of folds metric
@@ -101,13 +101,6 @@ def train_conv_cv(cont_data, pred_data, labels, indices, config, model_name, tem
     
     model_param = torch.load(os.path.join(MODELDIR, best_model_name), map_location=device)
     model.load_state_dict(model_param)
-    
-    if len(other_indices) > 0:
-        cont_feat = torch.as_tensor(cont_data[other_indices], dtype=torch.float32).to(device)
-        pred_feat = torch.as_tensor(pred_data[other_indices], dtype=torch.float32).to(device)
-        
-        other_pred = model(cont_feat, pred_feat).cpu().detach().numpy()
-        merge_with_pred(other_pred, other_indices, model_name=model_name)
     
     return model
 
@@ -139,7 +132,7 @@ def test_conv(model, model_name, test_data_name=f"test_agg1_mean_q5_q95_q5_q95")
 @click.option("--agg", default=1)
 def run_experiment(agg):
     exp_name = f"train_pred{agg}_mean_q5_q95_q5_q95_data"
-    config = {"weight_decay": 0.01, "num_epochs": 50, "conv_channels": 32}
+    config = {"weight_decay": 0.01, "num_epochs": 250, "conv_channels": 32}
     model_name = f"conv{config['conv_channels']}_pred"
 
     
@@ -150,11 +143,7 @@ def run_experiment(agg):
 
     train_data = np.load(OUTDIR+"train_logistic_raw_all_mean_q5_q95_q5_q95_data.npy")
     train_labels = np.load(OUTDIR+"train_logistic_raw_all_mean_q5_q95_q5_q95_labels.npy")
-
     pred_data = get_pred_data(type="train", id_dir='train_logistic_raw_all_mean_q5_q95_q5_q95_id.json')
-
-    model_name = f"conv_pred{agg}"
-    indices = get_customers_data_indices(num_data_points=np.arange(14), id_dir='train_logistic_raw_all_mean_q5_q95_q5_q95_id.json')
 
     model_name = f"conv_pred{agg}"
     indices = get_customers_data_indices(num_data_points=np.arange(14), id_dir=f'train_logistic_raw_all_mean_q5_q95_q5_q95_id.json')
