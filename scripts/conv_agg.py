@@ -113,9 +113,27 @@ def train_conv_cv(cont_data, cat_data, labels, indices, config, model_name, temp
 def test_conv(model, model_name, test_data_name=f"test_agg1_mean_q5_q95_q5_q95"):
 
     test_data_dir = f"{test_data_name}.npz"
-    test_data, labels, cat_indices = get_torch_agg_data(data_dir=test_data_dir)
-    test_pred = model(test_data) # Predict the test set
-    del test_data
+    cont_data, cat_data, train_labels = get_torch_agg_data(data_dir=test_data_dir)
+
+    device = "cpu"
+    if torch.cuda.is_available():
+        device = "cuda:0"
+        if torch.cuda.device_count() > 1:
+            model = torch.nn.DataParallel(model)
+        model.to(device)
+    
+    batch_sampler_indices = np.arange(len(cont_data))
+    np.random.shuffle(batch_sampler_indices)
+    sampler = BatchSampler(batch_sampler_indices, batch_size=BATCH_SIZE, drop_last=False, )
+    
+    test_pred = np.zeros(len(cont_data))
+    for idx, batch in enumerate(sampler):
+        cont_feat = torch.as_tensor(cont_data[batch], dtype=torch.float32).to(device)
+        cat_feat =  torch.as_tensor(cat_data[batch], dtype=torch.float32).to(device)
+        pred = model(cont_feat, cat_feat)        
+        test_pred[batch] = pred  # Add to out of folds array
+
+    del cont_data, cat_data
     gc.collect()
 
     with open(OUTDIR+f'{test_data_name}_id.json', 'r') as f:
@@ -148,15 +166,11 @@ def run_experiment(agg):
 
     cont_data, cat_data, train_labels = get_torch_agg_data(data_dir=f"train_agg{agg}_mean_q5_q95_q5_q95.npz")
     
-    #model_name = f"conv13_agg{agg}"
-    #indices = get_customers_data_indices(num_data_points=[13], id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')
-    #model = train_conv_cv(cont_data, cat_data, train_labels, indices, config, model_name=model_name, tempdir=tempdir, n_folds=5, seed=42)
-
     model_name = f"conv_agg{agg}"
     indices = get_customers_data_indices(num_data_points=np.arange(14), id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')
     model = train_conv_cv(cont_data, cat_data, train_labels, indices, config, model_name=model_name, tempdir=tempdir, n_folds=5, seed=42)
 
-    #test_conv(model, model_name, test_data_name=f"test_agg{agg}_mean_q5_q95_q5_q95")
+    test_conv(model, model_name, test_data_name=f"test_agg{agg}_mean_q5_q95_q5_q95")
 
 
 if __name__ == "__main__":

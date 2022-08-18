@@ -63,10 +63,18 @@ def run_with_ray_send_data_to_worker(population_size, num_cma_iterations, tempdi
     training_history = []
     train_data = pd.read_csv(PREDDIR+"train_pred.csv", index_col=0)
     train_labels = train_data["target"].values
-    train_data["STD"] = train_data.apply(np.std, axis=1)
-    train_data["STD"] = train_data["STD"]/train_data["STD"].max()
     #train_data = train_data.drop("target", axis=1)
-    cols  = [col for col in train_data.columns if col != "target"]
+    #cols  = [col for col in train_data.columns if col != "target"]
+    cols = ['xgbm13_p0_agg4', 'catb13_agg4', 'xgbm_p0_agg4', 'catb_agg4',
+       'xgbm13_p0_agg1', 'catb13_agg1', 'xgbm_p0_agg1', 'catb_agg1',
+       'xgbm13_p0_agg2', 'catb13_agg2', 'xgbm_p0_agg2', 'catb_agg2',
+       'xgbm13_p0_agg0', 'catb13_agg0', 'xgbm_p0_agg0', 'catb_agg0',
+       'xgbmv213_p0_agg0', 'xgbmv2_p0_agg0', 'K7977_xgb_42', 'K7977_catb_42',
+       'K7977_xgb_52_y']
+
+    train_data["STD"] = train_data[cols].apply(np.std, axis=1)
+    train_data["STD"] = train_data["STD"]/train_data["STD"].max()
+    
     X_train, X_test, y_train, y_test = train_test_split(train_data, train_labels, test_size=1/9, random_state=0, shuffle=True)
 
     #train_dataset = CustomerData(X_train, train_labels=y_train)
@@ -84,11 +92,11 @@ def run_with_ray_send_data_to_worker(population_size, num_cma_iterations, tempdi
     if train_method == "cma":
         es = CMAES(model.num_params, popsize=population_size, sigma_init=5)
     else:
-        es = BES(model, popsize=population_size, init_params=None, max_block_width=1000, sigma_init=5)
+        es = BES(model, popsize=population_size, init_params=None, max_block_width=2000, sigma_init=5)
 
     for cma_iteration in range(1, num_cma_iterations+1):
         #for feat, labels in train_loader:
-        batch_data = train_data.sample(BATCH_SIZE, weights="STD")
+        batch_data = train_data.sample(BATCH_SIZE_EN, weights="STD")
         labels = batch_data["target"].values
         batch_data = torch.from_numpy(batch_data[cols].values).float()
         candidates = es.ask()

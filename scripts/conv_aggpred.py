@@ -93,27 +93,43 @@ def train_conv_cv(cont_data, pred_data, labels, indices, config, model_name, tem
         merge_with_pred(val_pred, pred_indices, model_name=model_name, id_dir=f'train_logistic_raw_all_mean_q5_q95_q5_q95_id.json')
     
         print(f'Our fold {fold} CV score is {score}')
-        del y_val, x_cont_val, model
+        del y_val, x_cont_val
         gc.collect()
         torch.cuda.empty_cache()
     score, gini, recall = amex_metric(labels[used_indices].reshape(-1, ), oof_predictions, return_components=True)  # Compute out of folds metric
     print(f'Our out of folds CV score is {score}, Gini {gini}, recall {recall}')
     
-    model_param = torch.load(os.path.join(MODELDIR, best_model_name), map_location=device)
-    model.load_state_dict(model_param)
-    
     return model
 
 
-def test_conv(model, model_name, test_data_name=f"test_agg1_mean_q5_q95_q5_q95"):
+def test_conv(model, model_name, ):
 
-    test_data_dir = f"{test_data_name}.npz"
-    test_data, labels, cat_indices = get_torch_agg_data(data_dir=test_data_dir)
-    test_pred = model(test_data) # Predict the test set
+    device = "cpu"
+    if torch.cuda.is_available():
+        device = "cuda:0"
+        if torch.cuda.device_count() > 1:
+            model = torch.nn.DataParallel(model)
+        model.to(device)
+    
+    test_data = np.load(OUTDIR+"test_logistic_raw_all_mean_q5_q95_q5_q95_data.npy")
+    pred_data = get_pred_data(type="train", id_dir='test_logistic_raw_all_mean_q5_q95_q5_q95_id.json', cols=cols)
+    
+    batch_sampler_indices = np.arange(len(test_data))
+    np.random.shuffle(batch_sampler_indices)
+    sampler = BatchSampler(batch_sampler_indices, batch_size=BATCH_SIZE, drop_last=False, )
+    
+    test_pred = np.zeros(len(test_data))
+    for idx, batch in enumerate(sampler):
+
+        cont_feat = torch.as_tensor(test_data[batch], dtype=torch.float32).to(device)
+        pred_feat =  torch.as_tensor(pred_data[batch], dtype=torch.float32).to(device)
+        pred = model(cont_feat, pred_feat)
+        test_pred[batch] = pred  # Add to out of folds array
+ 
     del test_data
     gc.collect()
 
-    with open(OUTDIR+f'{test_data_name}_id.json', 'r') as f:
+    with open(OUTDIR+f'train_logistic_raw_all_mean_q5_q95_q5_q95_id.json', 'r') as f:
             test_id_dict = json.load(f)
 
     result = pd.DataFrame({"customer_ID":test_id_dict.values(), 
@@ -124,32 +140,32 @@ def test_conv(model, model_name, test_data_name=f"test_agg1_mean_q5_q95_q5_q95")
     sub_file_dir = os.path.join(OUTDIR, f"{model_name}.csv")
     result.set_index("customer_ID").to_csv(sub_file_dir)
     
-    merge_with_pred(test_pred, np.arange(len(test_pred)),
-                    model_name=model_name, type="test", id_dir=f'{test_data_name}_id.json')
+    merge_with_pred(test_pred,  np.arange(len(test_pred)), model_name=model_name, id_dir=f'test_logistic_raw_all_mean_q5_q95_q5_q95_id.json')
+
     
-
-@click.command()
-@click.option("--agg", default=1)
-def run_experiment(agg):
-    exp_name = f"train_pred{agg}_mean_q5_q95_q5_q95_data"
-    config = {"weight_decay": 0.01, "num_epochs": 250, "conv_channels": 32}
+def run_experiment():
+    config = {"weight_decay": 0.01, "num_epochs": 95, "conv_channels": 32}
     model_name = f"conv{config['conv_channels']}_pred"
-
+    cols = ['xgbm13_p0_agg4', 'catb13_agg4', 'xgbm_p0_agg4', 'catb_agg4',
+       'xgbm13_p0_agg1', 'catb13_agg1', 'xgbm_p0_agg1', 'catb_agg1',
+       'xgbm13_p0_agg2', 'catb13_agg2', 'xgbm_p0_agg2', 'catb_agg2',
+       'xgbm13_p0_agg0', 'catb13_agg0', 'xgbm_p0_agg0', 'catb_agg0',
+       'xgbmv213_p0_agg0', 'xgbmv2_p0_agg0']
     
     run_info = config
-    tempdir = tempfile.mkdtemp(prefix=f"pd_torch_pred1_{exp_name}_", dir=OUTDIR)
+    tempdir = tempfile.mkdtemp(prefix=f"pd_torch_pred_", dir=OUTDIR)
     with open(os.path.join(tempdir, "run_info.json"), "w") as fh:
         json.dump(run_info, fh, indent=4)   
 
     train_data = np.load(OUTDIR+"train_logistic_raw_all_mean_q5_q95_q5_q95_data.npy")
     train_labels = np.load(OUTDIR+"train_logistic_raw_all_mean_q5_q95_q5_q95_labels.npy")
-    pred_data = get_pred_data(type="train", id_dir='train_logistic_raw_all_mean_q5_q95_q5_q95_id.json')
+    pred_data = get_pred_data(type="train", id_dir='train_logistic_raw_all_mean_q5_q95_q5_q95_id.json', cols=cols)
 
-    model_name = f"conv_pred{agg}"
+    model_name = f"conv_pred"
     indices = get_customers_data_indices(num_data_points=np.arange(14), id_dir=f'train_logistic_raw_all_mean_q5_q95_q5_q95_id.json')
     model = train_conv_cv(train_data, pred_data, train_labels, indices, config, model_name=model_name, tempdir=tempdir, n_folds=5, seed=42)
 
-    #test_conv(model, model_name, test_data_name=f"test_agg{agg}_mean_q5_q95_q5_q95")
+    test_conv(model, model_name)
 
 
 if __name__ == "__main__":

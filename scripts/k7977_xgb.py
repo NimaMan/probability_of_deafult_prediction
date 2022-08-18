@@ -101,31 +101,37 @@ def train_and_evaluate(train, test, params, model_name, n_folds=5, seed=42):
         test_pred = model.predict(xgb.DMatrix(test[features]))
         test_predictions += test_pred / n_folds
         # Compute fold metric
-        score, gini, recall = metric.amex_metric(y_val.reshape(-1, ), val_pred, return_components=True)
+        score, gini, recall = metric.amex_metric(y_val.values.reshape(-1, ), val_pred, return_components=True)
         print(f'Our fold {fold} CV score is {score}')
         del x_train, x_val, y_train, y_val, xgb_train, xgb_valid
         gc.collect()
     # Compute out of folds metric
-    score, gini, recall = metric.amex_metric(train["target"], oof_predictions, return_components=True)  # Compute out of folds metric
+    score, gini, recall = metric.amex_metric(train["target"].values.reshape(-1, ), oof_predictions, return_components=True)  # Compute out of folds metric
     print(f'Our out of folds CV score is {score}, Gini {gini}, recall {recall}')
     
     # Create a dataframe to store out of folds predictions
     oof_df = pd.DataFrame({'customer_ID': train['customer_ID'], model_name: oof_predictions})
     merge_with_pred_df(oof_df, type="train")
     # Create a dataframe to store test prediction
-    test_df = pd.DataFrame({'customer_ID': test['customer_ID'], 'prediction': test_predictions})
-    test_df.to_csv(f'est_lgbm_baseline_{n_folds}fold_seed{seed}.csv', index=False)
+    test_df = pd.DataFrame({'customer_ID': test['customer_ID'], model_name: test_predictions})
+    test_df.to_csv(OUTDIR + f'est_lgbm_baseline_{n_folds}fold_seed{seed}.csv', index=False)
     merge_with_pred_df(test_df, type="test")
  
 
 if __name__ == "__main__":
 
-    params = {
+   
+
+    train = pd.read_parquet(OUTDIR + 'train_k7977.parquet')
+    test = pd.read_parquet(OUTDIR + 'test_k7977.parquet')
+    for seed in [52, 62, 82]:
+        model_name = f'K7977_xgb_{seed}'
+        params = {
         'objective': 'binary:logistic',
         #'metric': "binary_logloss",
         #'eval_metric':'logloss',
         'disable_default_eval_metric': 1,
-        'seed': 42,
+        'seed': seed,
         'learning_rate': 0.05,
         'n_jobs': -1,
         'colsample_bytree': 0.6,
@@ -138,9 +144,4 @@ if __name__ == "__main__":
         'max_depth': 4, 
         'subsample': 0.8,
         }
-
-    train = pd.read_parquet(OUTDIR + 'train_k7977.parquet')
-    test = pd.read_parquet(OUTDIR + 'test_k7977.parquet')
-    for seed in [42, 52, 62, 82]:
-        model_name = f'K7977_xgb_{seed}'
         train_and_evaluate(train, test, params, model_name=model_name,)

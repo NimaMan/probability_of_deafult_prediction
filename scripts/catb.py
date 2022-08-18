@@ -16,7 +16,7 @@ from catboost import CatBoostClassifier
 import pd.metric as metric
 from pd.utils import merge_with_pred, get_customers_data_indices
 from pd.params import *
-from pd.gmb_utils import get_agg_data, xgb_amex
+from pd.gmb_utils import get_agg_data
 
 
 def train_catb_cv(data, labels, indices, params, model_name, id_dir=None, n_folds=5, seed=42):
@@ -109,14 +109,9 @@ def run_experiment(agg):
 
     train_data, train_labels, cat_indices = get_agg_data(data_dir=f"train_agg{agg}_mean_q5_q95_q5_q95.npz")
     
-    model_name = f"catb13_agg{agg}"
-    indices = get_customers_data_indices(num_data_points=[13], id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')
-    model = train_catb_cv(train_data, train_labels, indices, params, model_name=model_name, id_dir=id_dir, n_folds=5, seed=42)
-
     model_name = f"catb_agg{agg}"
     indices = get_customers_data_indices(num_data_points=np.arange(14), id_dir=f'train_agg{agg}_mean_q5_q95_q5_q95_id.json')
     model = train_catb_cv(train_data, train_labels, indices, params, model_name=model_name, id_dir=id_dir, n_folds=5, seed=42)
-
     test_catb(model, model_name, test_data_name=f"test_agg{agg}_mean_q5_q95_q5_q95")
 
 

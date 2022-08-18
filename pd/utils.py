@@ -100,7 +100,7 @@ def merge_with_pred_df(pred_df, type="train"):
     pred_file.set_index("customer_ID").to_csv(pred_dir)
 
 
-def get_pred_data(id_dir, type="train", agg=1):
+def get_pred_data(id_dir, type="train", cols=None):
     if type == "train":
         pred_dir = os.path.join(PREDDIR, "train_pred.csv")
     else:
@@ -110,7 +110,25 @@ def get_pred_data(id_dir, type="train", agg=1):
     indices = np.arange(len(pred_file))
     customers = get_customers_id_from_indices(indices, id_dir=id_dir)
     
-    cols  = [col for col in pred_file.columns if col not in ["customer_ID", "target"]]
+    if cols is None:
+        cols  = [col for col in pred_file.columns if col not in ["customer_ID", "target"]]
+    
     data = pred_file.loc[customers][cols].values.astype(np.float32)
+
+    return data
+
+
+def get_pred_data_df(id_dir, type="test", cols=None):
+    if type == "train":
+        pred_dir = os.path.join(PREDDIR, "train_pred.csv")
+    else:
+        pred_dir = os.path.join(PREDDIR, "test_pred.csv")
+
+    pred_file = pd.read_csv(pred_dir, index_col=0)
+    indices = np.arange(len(pred_file))
+    customers = get_customers_id_from_indices(indices, id_dir=id_dir)
+    if cols in None:
+        cols  = [col for col in pred_file.columns if col not in ["customer_ID", "target"]]
+    data = pred_file.loc[customers][cols]
 
     return data

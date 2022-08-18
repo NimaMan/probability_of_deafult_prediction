@@ -62,7 +62,7 @@ This is the way to go..
 ## FE 
 
 Main finding here: Different features result in a different complementary predictions 
-
+    - CNN with SFA
 
 ## Models 
 

@@ -18,7 +18,7 @@ from itertools import combinations
 
 import pd.metric as metric
 from pd.utils import merge_with_pred_df
-from pd.gmb_utils import lgb_amex_metric
+from pd.gmb_utils import lgb_amex_metric, focal_loss_lgb
 from pd.params import *
 
 
@@ -40,20 +40,27 @@ def get_difference(data, num_features):
     return df1
 
 
-def read_preprocess_data():
+def read_preprocess_data(lag=False):
     train = pd.read_parquet(TRAINDATA)
     features = train.drop(['customer_ID', 'S_2'], axis = 1).columns.to_list()
     num_features = [col for col in features if col not in CATCOLS]
     print('Starting training feature engineer...')
-    train_num_agg = train.groupby("customer_ID")[num_features].agg(['mean', 'std', 'min', 'max', "fisrt", 'last'])
+    train_num_agg = train.groupby("customer_ID")[num_features].agg(['mean', 'std', 'min', 'max', "first", 'last'])
     train_num_agg.columns = ['_'.join(x) for x in train_num_agg.columns]
     train_num_agg.reset_index(inplace = True)
-    train_cat_agg = train.groupby("customer_ID")[CATCOLS].agg(['count', "fist", 'last', 'nunique'])
+    train_cat_agg = train.groupby("customer_ID")[CATCOLS].agg(['count', "first", 'last', 'nunique'])
     train_cat_agg.columns = ['_'.join(x) for x in train_cat_agg.columns]
     train_cat_agg.reset_index(inplace = True)
-    train_labels = pd.read_csv('/content/data/train_labels.csv')
+    train_labels = pd.read_csv(TRAINLABELS)
     # Transform float64 columns to float32
-    cols = list(train_num_agg.dtypes[train_num_agg.dtypes == 'float64'].index)
+
+    if lag:
+        for col in train_num_agg:
+            if 'last' in col and col.replace('last', 'first') in train_num_agg:
+                train_num_agg[col + '_lag_sub'] = train_num_agg[col] - train_num_agg[col.replace('last', 'first')]
+                train_num_agg[col + '_lag_div'] = train_num_agg[col] / train_num_agg[col.replace('last', 'first')]
+
+        cols = list(train_num_agg.dtypes[train_num_agg.dtypes == 'float64'].index)
     for col in tqdm(cols):
         train_num_agg[col] = train_num_agg[col].astype(np.float32)
     # Transform int64 columns to int32
@@ -63,18 +70,30 @@ def read_preprocess_data():
     # Get the difference
     train_diff = get_difference(train, num_features)
     train = train_num_agg.merge(train_cat_agg, how = 'inner', on = 'customer_ID').merge(train_diff, how = 'inner', on = 'customer_ID').merge(train_labels, how = 'inner', on = 'customer_ID')
-    train.to_parquet(OUTDIR + "train_k7977.parquet")
+    if lag:
+        train.to_parquet(OUTDIR + "train_k7977_lag.parquet")
+    else:
+        train.to_parquet(OUTDIR + "train_k7977.parquet")
+    
     del train_num_agg, train_cat_agg, train_diff, train
     gc.collect()
     
     test = pd.read_parquet(TESTDATA)
     print('Starting test feature engineer...')
-    test_num_agg = test.groupby("customer_ID")[num_features].agg(['mean', 'std', 'min', 'max', "fist", 'last'])
+    test_num_agg = test.groupby("customer_ID")[num_features].agg(['mean', 'std', 'min', 'max', "first", 'last'])
     test_num_agg.columns = ['_'.join(x) for x in test_num_agg.columns]
     test_num_agg.reset_index(inplace = True)
-    test_cat_agg = test.groupby("customer_ID")[CATCOLS].agg(['count', "fisrt", 'last', 'nunique'])
+    test_cat_agg = test.groupby("customer_ID")[CATCOLS].agg(['count', "first", 'last', 'nunique'])
     test_cat_agg.columns = ['_'.join(x) for x in test_cat_agg.columns]
     test_cat_agg.reset_index(inplace = True)
+
+    if lag:
+        for col in test_num_agg:
+            if 'last' in col and col.replace('last', 'first') in test_num_agg:
+                test_num_agg[col + '_lag_sub'] = test_num_agg[col] - test_num_agg[col.replace('last', 'first')]
+                test_num_agg[col + '_lag_div'] = test_num_agg[col] / test_num_agg[col.replace('last', 'first')]
+
+
     # Transform float64 columns to float32
     cols = list(test_num_agg.dtypes[test_num_agg.dtypes == 'float64'].index)
     for col in tqdm(cols):
@@ -89,8 +108,11 @@ def read_preprocess_data():
     del test_num_agg, test_cat_agg, test_diff
     gc.collect()
     # Save files to disk
-    test.to_parquet(OUTDIR + 'test_k7977.parquet')
-
+    if lag:
+        train.to_parquet(OUTDIR + "test_k7977_lag.parquet")
+    else:
+        train.to_parquet(OUTDIR + "test_k7977.parquet")
+    
 
 
 def seed_everything(seed):
@@ -150,6 +172,7 @@ def train_and_evaluate(train, test, params, model_name, n_folds=5, seed=42):
         lgb_valid = lgb.Dataset(x_val, y_val, categorical_feature=cat_features)
         model = lgb.train(
             params = params,
+            fobj = focal_loss_lgb,
             train_set = lgb_train,
             num_boost_round = 10500,
             valid_sets = [lgb_train, lgb_valid],
@@ -167,31 +190,34 @@ def train_and_evaluate(train, test, params, model_name, n_folds=5, seed=42):
         test_pred = model.predict(test[features])
         test_predictions += test_pred / n_folds
         # Compute fold metric
-        score, gini, recall = metric.amex_metric(y_val.reshape(-1, ), val_pred, return_components=True)
+        score, gini, recall = metric.amex_metric(y_val.values.reshape(-1, ), val_pred, return_components=True)
         print(f'Our fold {fold} CV score is {score}')
         del x_train, x_val, y_train, y_val, lgb_train, lgb_valid
         gc.collect()
     # Compute out of folds metric
-    score, gini, recall = metric.amex_metric(train["target"], oof_predictions, return_components=True)  # Compute out of folds metric
+    score, gini, recall = metric.amex_metric(train["target"].values.reshape(-1, ), oof_predictions, return_components=True)  # Compute out of folds metric
     print(f'Our out of folds CV score is {score}, Gini {gini}, recall {recall}')
     
     # Create a dataframe to store out of folds predictions
     oof_df = pd.DataFrame({'customer_ID': train['customer_ID'], model_name: oof_predictions})
     merge_with_pred_df(oof_df, type="train")
     # Create a dataframe to store test prediction
-    test_df = pd.DataFrame({'customer_ID': test['customer_ID'], 'prediction': test_predictions})
-    test_df.to_csv(f'est_lgbm_baseline_{n_folds}fold_seed{seed}.csv', index=False)
+    test_df = pd.DataFrame({'customer_ID': test['customer_ID'], model_name: test_predictions})
+    test_df.to_csv(OUTDIR + f'est_lgbm_baseline_{n_folds}fold_seed{seed}.csv', index=False)
     merge_with_pred_df(test_df, type="test")
  
 
 if __name__ == "__main__":
 
-    read_preprocess_data()
-    params = {
+    train = pd.read_parquet(OUTDIR + 'train_k7977.parquet')
+    test = pd.read_parquet(OUTDIR + 'test_k7977.parquet')
+    for seed in [52, 62, 82]:
+        model_name = f'K7977_focal_{seed}'
+        params = {
         'objective': 'binary',
         'metric': "binary_logloss",
         'boosting': "dart",
-        'seed': 42,
+        'seed': seed,
         'num_leaves': 100,
         'learning_rate': 0.01,
         'feature_fraction': 0.20,
@@ -201,9 +227,4 @@ if __name__ == "__main__":
         'lambda_l2': 2,
         'min_data_in_leaf': 40,
         }
-
-    train = pd.read_parquet(OUTDIR + 'train_k7977.parquet')
-    test = pd.read_parquet(OUTDIR + 'test_k7977.parquet')
-    for seed in [42, 52, 62, 82]:
-        model_name = f'K7977_{seed}'
         train_and_evaluate(train, test, params, model_name=model_name,)
