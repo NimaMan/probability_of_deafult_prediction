@@ -14,10 +14,10 @@ from tqdm.auto import tqdm
 from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.preprocessing import LabelEncoder
 from catboost import CatBoostClassifier
-from itertools import combinations
 
 import pd.metric as metric
 from pd.utils import merge_with_pred_df
+from pd.gmb_utils import FocalLossObjective
 from pd.params import *
 
 
@@ -69,7 +69,8 @@ def train_and_evaluate(train, test, params, model_name, n_folds=5, seed=42):
         x_train, x_val = train[features].iloc[trn_ind], train[features].iloc[val_ind]
         y_train, y_val = train["target"].iloc[trn_ind], train["target"].iloc[val_ind]
         
-        model = CatBoostClassifier(iterations=105000, random_state=seed, task_type=params["device"])
+        model = CatBoostClassifier(loss_function=FocalLossObjective(), iterations=105000, 
+                                    random_state=seed, task_type=params["device"])
         model.fit(x_train, y_train, eval_set=[(x_val, y_val)], cat_features=cat_features,  verbose=100)
         
         # Save best model
@@ -95,7 +96,6 @@ def train_and_evaluate(train, test, params, model_name, n_folds=5, seed=42):
     merge_with_pred_df(oof_df, type="train")
     # Create a dataframe to store test prediction
     test_df = pd.DataFrame({'customer_ID': test['customer_ID'], model_name: test_predictions})
-    test_df.to_csv(OUTDIR + f'est_lgbm_baseline_{n_folds}fold_seed{seed}.csv', index=False)
     merge_with_pred_df(test_df, type="test")
  
 
@@ -108,5 +108,5 @@ if __name__ == "__main__":
     train = pd.read_parquet(OUTDIR + 'train_k7977.parquet')
     test = pd.read_parquet(OUTDIR + 'test_k7977.parquet')
     for seed in [42, 52, 62, 82]:
-        model_name = f'K7977_catb_{seed}'
-        train_and_evaluate(train, test, params, model_name=model_name,)
+        model_name = f'K7977_focal_catb_{seed}'
+        train_and_evaluate(train, test, params, model_name=model_name, seed=seed)

@@ -127,3 +127,61 @@ def focal_loss_lgb_eval_error(y_pred, dtrain, alpha=0.03, gamma=2):
     p = 1/(1+np.exp(-y_pred))
     loss = -( a*y_true + (1-a)*(1-y_true) ) * (( 1 - ( y_true*p + (1-y_true)*(1-p)) )**g) * ( y_true*np.log(p)+(1-y_true)*np.log(1-p) )
     return 'focal_loss', np.mean(loss), False 
+
+
+def focal_loss_xgb(pred,dtrain,gamma_indct=1.2):
+    # retrieve data from dtrain matrix
+    label = dtrain.get_label()
+    # compute the prediction with sigmoid
+    sigmoid_pred = 1.0 / (1.0 + np.exp(-pred))
+    # gradient
+    # complex gradient with different parts
+    grad_first_part = (label+((-1)**label)*sigmoid_pred)**gamma_indct
+    grad_second_part = label - sigmoid_pred
+    grad_third_part = gamma_indct*(1-label-sigmoid_pred)
+    grad_log_part = np.log(1-label-((-1)**label)*sigmoid_pred + 1e-7)       # add a small number to avoid numerical instability
+    # combine the gradient
+    grad = -grad_first_part*(grad_second_part+grad_third_part*grad_log_part)
+    # combine the gradient parts to get hessian
+    hess_first_term = gamma_indct*(label+((-1)**label)*sigmoid_pred)**(gamma_indct-1)*sigmoid_pred*(1.0 - sigmoid_pred)*(grad_second_part+grad_third_part*grad_log_part)
+    hess_second_term = (-sigmoid_pred*(1.0 - sigmoid_pred)-gamma_indct*sigmoid_pred*(1.0 - sigmoid_pred)*grad_log_part-((1/(1-label-((-1)**label)*sigmoid_pred))*sigmoid_pred*(1.0 - sigmoid_pred)))*grad_first_part
+    # get the final 2nd order derivative
+    hess = -(hess_first_term+hess_second_term)
+    
+    return grad, hess
+
+
+class FocalLossObjective(object):
+    def calc_ders_range(self, approxes, targets, weights):
+        # approxes, targets, weights are indexed containers of floats
+        # (containers with only __len__ and __getitem__ defined).
+        # weights parameter can be None.
+        # Returns list of pairs (der1, der2)
+        gamma = 2.
+        # alpha = 1.
+        assert len(approxes) == len(targets)
+        if weights is not None:
+            assert len(weights) == len(approxes)
+        
+        exponents = []
+        for index in xrange(len(approxes)):
+            exponents.append(math.exp(approxes[index]))
+
+        result = []
+        for index in xrange(len(targets)):
+            p = exponents[index] / (1 + exponents[index])
+
+            if targets[index] > 0.0:
+                der1 = -((1-p)**(gamma-1))*(gamma * math.log(p) * p + p - 1)/p
+                der2 = gamma*((1-p)**gamma)*((gamma*p-1)*math.log(p)+2*(p-1))
+            else:
+                der1 = (p**(gamma-1)) * (gamma * math.log(1 - p) - p)/(1 - p)
+                der2 = p**(gamma-2)*((p*(2*gamma*(p-1)-p))/(p-1)**2 + (gamma-1)*gamma*math.log(1 - p))
+
+            if weights is not None:
+                der1 *= weights[index]
+                der2 *= weights[index]
+
+            result.append((der1, der2))
+
+        return result

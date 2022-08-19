@@ -203,16 +203,15 @@ def train_and_evaluate(train, test, params, model_name, n_folds=5, seed=42):
     merge_with_pred_df(oof_df, type="train")
     # Create a dataframe to store test prediction
     test_df = pd.DataFrame({'customer_ID': test['customer_ID'], model_name: test_predictions})
-    test_df.to_csv(OUTDIR + f'est_lgbm_baseline_{n_folds}fold_seed{seed}.csv', index=False)
     merge_with_pred_df(test_df, type="test")
  
 
 if __name__ == "__main__":
-
-    train = pd.read_parquet(OUTDIR + 'train_k7977.parquet')
-    test = pd.read_parquet(OUTDIR + 'test_k7977.parquet')
-    for seed in [52, 62, 82]:
-        model_name = f'K7977_focal_{seed}'
+    read_preprocess_data(lag=True)
+    train = pd.read_parquet(OUTDIR + 'train_k7977_lag.parquet')
+    test = pd.read_parquet(OUTDIR + 'test_k7977_lag.parquet')
+    for seed in [42, 52, 62, 82]:
+        model_name = f'K7977_lag_focal_{seed}'
         params = {
         'objective': 'binary',
         'metric': "binary_logloss",

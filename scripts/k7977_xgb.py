@@ -18,7 +18,7 @@ from itertools import combinations
 
 import pd.metric as metric
 from pd.utils import merge_with_pred_df
-from pd.gmb_utils import xgb_amex
+from pd.gmb_utils import xgb_amex, focal_loss_xgb
 from pd.params import *
 
 
@@ -124,10 +124,11 @@ if __name__ == "__main__":
 
     train = pd.read_parquet(OUTDIR + 'train_k7977.parquet')
     test = pd.read_parquet(OUTDIR + 'test_k7977.parquet')
-    for seed in [52, 62, 82]:
-        model_name = f'K7977_xgb_{seed}'
+    for seed in [42, 52, 62, 82]:
+        model_name = f'K7977_focal_xgb_{seed}'
         params = {
-        'objective': 'binary:logistic',
+        #'objective': 'binary:logistic',
+        'objective': focal_loss_xgb,
         #'metric': "binary_logloss",
         #'eval_metric':'logloss',
         'disable_default_eval_metric': 1,

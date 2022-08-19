@@ -14,26 +14,24 @@ from sklearn.model_selection import StratifiedKFold
 import xgboost as xgb
 
 import pd.metric as metric
-from pd.utils import merge_with_pred, get_customers_data_indices
+from pd.utils import merge_with_pred_df, get_customers_id_from_indices
 from pd.params import *
-from pd.gmb_utils import get_agg_data, xgb_amex
+from pd.gmb_utils import get_agg_data, xgb_amex, focal_loss_xgb
 
 
-def train_xgb_cv(data, labels, indices, params, model_name, id_dir=None, n_folds=5, seed=42):
-    """
-    take the data in certain indices [for example c13 data]
-    """
-    used_indices, other_indices = indices
+def train_xgb_cv(data, test, labels, params, model_name, id_dir, n_folds=5, seed=42):
+    
     print(f"training the {model_name}", params)
-    oof_predictions = np.zeros(len(used_indices))
-    best_model_name, best_model_score = "", 0
+    oof_predictions = np.zeros(len(data))
+    test_predictions = np.zeros(len(test))
+    
     kfold = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=seed)
-    for fold, (trn_ind, val_ind) in enumerate(kfold.split(data.iloc[used_indices], labels[used_indices], used_indices)):
+    for fold, (trn_ind, val_ind) in enumerate(kfold.split(data, labels)):
         print(' ')
         print('-'*50)
         print(f'Training fold {fold} ...')
-        x_train, x_val = data.iloc[used_indices].iloc[trn_ind], data.iloc[used_indices].iloc[val_ind]
-        y_train, y_val = labels[used_indices][trn_ind], labels[used_indices][val_ind]
+        x_train, x_val = data.iloc[trn_ind], data.iloc[val_ind]
+        y_train, y_val = labels[trn_ind], labels[val_ind]
         
         xgb_train = xgb.DMatrix(x_train, y_train, )
         xgb_valid = xgb.DMatrix(x_val, y_val, )
@@ -51,30 +49,30 @@ def train_xgb_cv(data, labels, indices, params, model_name, id_dir=None, n_folds
         val_pred = model.predict(xgb.DMatrix(x_val)) # Predict validation
         oof_predictions[val_ind] = val_pred  # Add to out of folds array
         
+        # Predict the test set
+        test_pred = model.predict(xgb.DMatrix(test))
+        test_predictions += test_pred / n_folds
+        
         # Compute fold metric
         score, gini, recall = metric.amex_metric(y_val.reshape(-1, ), val_pred, return_components=True)
         joblib.dump(model, os.path.join(MODELDIR, f'{model_name}_{int(score*10000)}'))
-        if score > best_model_score:
-            best_model_name = f'{model_name}_{int(score*10000)}'
-            best_model_score = score
-
-        pred_indices = used_indices[val_ind]
-        merge_with_pred(val_pred, pred_indices, model_name=model_name, id_dir=id_dir)
     
         print(f'Our fold {fold} CV score is {score}')
         del x_train, x_val, y_train, y_val, xgb_train, xgb_valid
         gc.collect()
-    score, gini, recall = metric.amex_metric(labels[used_indices].reshape(-1, ), oof_predictions, return_components=True)  # Compute out of folds metric
+    
+    score, gini, recall = metric.amex_metric(labels.reshape(-1, ), oof_predictions, return_components=True)  # Compute out of folds metric
     print(f'Our out of folds CV score is {score}, Gini {gini}, recall {recall}')
     
-    best_model = joblib.load(os.path.join(MODELDIR, best_model_name))
-    if len(other_indices) > 0:
-        dx = xgb.DMatrix(data.iloc[other_indices])
-        other_pred = best_model.predict(dx)
-        merge_with_pred(other_pred, other_indices, model_name=model_name, id_dir=id_dir)
+    train_customers = get_customers_id_from_indices(np.arange(len(oof_predictions)), id_dir["train"])
+    oof_df = pd.DataFrame({'customer_ID': train_customers, model_name: oof_predictions})
+    merge_with_pred_df(oof_df, type="train")
     
-    return best_model
-
+    # Create a dataframe to store test prediction
+    test_customers = get_customers_id_from_indices(np.arange(len(test_predictions)), id_dir["test"])
+    test_df = pd.DataFrame({'customer_ID': test_customers, model_name: test_predictions})
+    merge_with_pred_df(test_df, type="test")
+ 
 
 def test_xgb(model, model_name, test_data_name=f"test_agg1_mean_q5_q95_q5_q95",):
 
@@ -103,12 +101,20 @@ def test_xgb(model, model_name, test_data_name=f"test_agg1_mean_q5_q95_q5_q95",)
 @click.command()
 @click.option("--agg", default=1)
 def run_experiment(agg):
-    params = {
-        'objective': 'binary:logistic',
+
+    id_dir = {"train": f"train_agg{agg}_mean_q5_q95_q5_q95_id.json", 
+              "test": f"test_agg{agg}_mean_q5_q95_q5_q95_id.json",}    
+    train_data, train_labels, cat_indices = get_agg_data(data_dir=f"train_agg{agg}_mean_q5_q95_q5_q95.npz", agg=agg)
+    test_data, labels, cat_indices = get_agg_data(data_dir=f"test_agg{agg}_mean_q5_q95_q5_q95.npz")
+    
+    for seed in [42, 52, 62, 82]:
+        model_name = f"xgbm_focal_seed{seed}_agg{agg}"
+        params = {
+        'objective': focal_loss_xgb,
         #'metric': "binary_logloss",
         #'eval_metric':'logloss',
         'disable_default_eval_metric': 1,
-        'seed': 42,
+        'seed': seed,
         'learning_rate': 0.05,
         'n_jobs': -1,
         'colsample_bytree': 0.6,
@@ -121,19 +127,9 @@ def run_experiment(agg):
         'max_depth': 4, 
         'subsample': 0.8,
         }
-    
-    id_dir = f"train_agg{agg}_mean_q5_q95_q5_q95_id.json"
-    run_info = params
-    #tempdir = tempfile.mkdtemp(prefix=f"pd_xgbm_p{pred_feat}_{exp_name}_", dir=OUTDIR)
-    #with open(os.path.join(tempdir, "run_info.json"), "w") as fh:
-    #    json.dump(run_info, fh, indent=4)   
-
-    train_data, train_labels, cat_indices = get_agg_data(data_dir=f"train_agg{agg}_mean_q5_q95_q5_q95.npz", agg=agg)
-    
-    model_name = f"xgbm_v2_agg{agg}"
-    indices = get_customers_data_indices(num_data_points=np.arange(14), id_dir=id_dir)
-    model = train_xgb_cv(train_data, train_labels, indices, params, model_name=model_name, id_dir=id_dir, n_folds=5, seed=42)
-    test_xgb(model, model_name, test_data_name=f"test_agg{agg}_mean_q5_q95_q5_q95")
+        
+        train_xgb_cv(train_data, test_data, train_labels, params, 
+                            model_name=model_name, id_dir=id_dir, n_folds=5, seed=seed)
 
 
 if __name__ == "__main__":
