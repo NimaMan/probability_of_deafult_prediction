@@ -89,7 +89,7 @@ def train_conv_cv(cont_data, cat_data, labels, indices, config, model_name, temp
             best_model_score = score
 
         pred_indices = used_indices[val_ind]
-        merge_with_pred(val_pred, pred_indices, model_name=model_name)
+        merge_with_pred(val_pred, pred_indices, model_name=model_name, id_dir=config["id_dir"])
     
         print(f'Our fold {fold} CV score is {score}')
         del y_val, x_cont_val, x_cat_val, model
@@ -155,7 +155,7 @@ def test_conv(model, model_name, test_data_name=f"test_agg1_mean_q5_q95_q5_q95")
 @click.option("--agg", default=1)
 def run_experiment(agg):
     exp_name = f"train_agg{agg}_mean_q5_q95_q5_q95_data"
-    config = {"weight_decay": 0.01, "num_epochs": 50, "conv_channels": 32}
+    config = {"weight_decay": 0.01, "num_epochs": 100, "conv_channels": 32, "id_dir": f'train_agg{agg}_mean_q5_q95_q5_q95_id.json'}
     model_name = f"conv{config['conv_channels']}_agg"
 
     

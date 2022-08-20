@@ -81,6 +81,7 @@ def train_and_evaluate(train, test, params, model_name, n_folds=5, seed=42):
         xgb_valid = xgb.DMatrix(x_val, y_val, )
 
         model =  xgb.train(
+            obj = focal_loss_xgb,
             params = params,
             dtrain = xgb_train,
             maximize = True,
@@ -128,7 +129,7 @@ if __name__ == "__main__":
         model_name = f'K7977_focal_xgb_{seed}'
         params = {
         #'objective': 'binary:logistic',
-        'objective': focal_loss_xgb,
+        #'objective': focal_loss_xgb,
         #'metric': "binary_logloss",
         #'eval_metric':'logloss',
         'disable_default_eval_metric': 1,
@@ -145,4 +146,4 @@ if __name__ == "__main__":
         'max_depth': 4, 
         'subsample': 0.8,
         }
-        train_and_evaluate(train, test, params, model_name=model_name,)
+        train_and_evaluate(train, test, params, model_name=model_name, seed=seed)

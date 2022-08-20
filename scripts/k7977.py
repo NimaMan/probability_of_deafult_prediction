@@ -109,9 +109,9 @@ def read_preprocess_data(lag=False):
     gc.collect()
     # Save files to disk
     if lag:
-        train.to_parquet(OUTDIR + "test_k7977_lag.parquet")
+        test.to_parquet(OUTDIR + "test_k7977_lag.parquet")
     else:
-        train.to_parquet(OUTDIR + "test_k7977.parquet")
+        test.to_parquet(OUTDIR + "test_k7977.parquet")
     
 
 
@@ -207,7 +207,6 @@ def train_and_evaluate(train, test, params, model_name, n_folds=5, seed=42):
  
 
 if __name__ == "__main__":
-    read_preprocess_data(lag=True)
     train = pd.read_parquet(OUTDIR + 'train_k7977_lag.parquet')
     test = pd.read_parquet(OUTDIR + 'test_k7977_lag.parquet')
     for seed in [42, 52, 62, 82]:
@@ -226,4 +225,4 @@ if __name__ == "__main__":
         'lambda_l2': 2,
         'min_data_in_leaf': 40,
         }
-        train_and_evaluate(train, test, params, model_name=model_name,)
+        train_and_evaluate(train, test, params, model_name=model_name, seed=seed)

@@ -37,6 +37,7 @@ def train_xgb_cv(data, test, labels, params, model_name, id_dir, n_folds=5, seed
         xgb_valid = xgb.DMatrix(x_val, y_val, )
 
         model =  xgb.train(
+            obj = focal_loss_xgb,
             params = params,
             dtrain = xgb_train,
             maximize = True,
@@ -110,7 +111,7 @@ def run_experiment(agg):
     for seed in [42, 52, 62, 82]:
         model_name = f"xgbm_focal_seed{seed}_agg{agg}"
         params = {
-        'objective': focal_loss_xgb,
+        #'objective': focal_loss_xgb,
         #'metric': "binary_logloss",
         #'eval_metric':'logloss',
         'disable_default_eval_metric': 1,

@@ -102,7 +102,7 @@ def train_and_evaluate(train, test, params, model_name, n_folds=5, seed=42):
 if __name__ == "__main__":
 
     params = {
-        "device": "GPU"
+        "device": "CPU"
         }
 
     train = pd.read_parquet(OUTDIR + 'train_k7977.parquet')
